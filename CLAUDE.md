@@ -49,7 +49,7 @@ de StockMerger, pero vale la misma disciplina: está limpio y modularizado
 3. Para **editar**: `Grep` el `old_string` único → `Read` solo esa franja →
    `Edit`. No vuelvas a leer el archivo después de editar (el harness ya
    valida el cambio).
-4. **CSS (`<style>` 26–408)** y **HTML/markup (410–829)** casi nunca hacen
+4. **CSS (`<style>` 26–415)** y **HTML/markup (417–836)** casi nunca hacen
    falta para lógica de negocio — no los leas salvo trabajo de estilos o
    maquetado.
 
@@ -58,9 +58,9 @@ de StockMerger, pero vale la misma disciplina: está limpio y modularizado
 | Región | Líneas |
 |---|---|
 | `<head>` + CDN + script de tema | 1–25 |
-| **CSS** (`<style>`) | 26–408 |
-| **HTML / markup** (gate, header, vistas, modales) | 410–829 |
-| **JS principal** (`<script>`) | 830–2873 |
+| **CSS** (`<style>`) | 26–415 |
+| **HTML / markup** (gate, header, vistas, modales) | 417–836 |
+| **JS principal** (`<script>`) | 837–2881 |
 
 ### Módulos internos (dentro del JS principal)
 
@@ -68,31 +68,31 @@ Cada módulo arranca con un banner `// XXX.JS — ...`. Saltá directo al rango:
 
 | Módulo | Líneas | Rol |
 |---|---|---|
-| `CONST.JS` | 845–881 | Categorías y personas por defecto, teclas, emojis/colores, claves de localStorage. |
-| `STORE.JS` | 882–888 | `load()` / `save()` sobre localStorage. Todo el volumen de datos es chico; no hace falta IndexedDB. |
-| `STATE.JS` | 889–924 | Estado global: `expenses`, `recurring`, `budgets`, `CATEGORIES`, `PEOPLE`, `meId`, config de nube. |
-| `UTILS.JS` | 925–968 | `uid()`, `fmt()`, `pkey()` (clave normalizada de persona), `liveExpenses()` (filtra lápidas), `escapeHtml()`. |
-| `MUTATE.JS` | 969–1033 | **Toda escritura pasa por acá**: marca `updatedAt` + `_dirty` y dispara el push a la nube. Incluye borrado lógico, purga de lápidas y migración de datos viejos. |
-| `PEOPLE.JS` | 1034–1173 | Quién es quién: chip de usuario, selector "PAGÓ", modal "¿quién soy?", alta/baja de personas. **No hay personas precargadas.** |
-| `UI.JS` | 1174–1303 | Piezas compartidas: confirm propio, navegación entre vistas, display del monto, grilla de categorías, teclado, punto de sincronización. |
-| `TAGS.JS` | 1304–1346 | Etiquetas libres por gasto (máx. 5). |
-| `HOME.JS` | 1347–1401 | Pantalla de alta de gastos. |
-| `HISTORIAL.JS` | 1402–1514 | Lista del mes + filtros (persona / categoría / etiqueta) + swipe para borrar. |
-| `EDIT.JS` | 1515–1553 | Modal de edición de un gasto (incluye cambiar quién pagó). |
-| `DONUT.JS` | 1554–1653 | Dona de distribución por categoría, en SVG a mano (sin librerías de charts). |
-| `WHO.JS` | 1654–1718 | **Quién gastó**: totales por persona y balance "si parten todo a la mitad". |
-| `RESUMEN.JS` | 1719–1906 | Números del mes, evolución, día más caro, día de la semana, gastos hormiga, comparativa mes anterior, barras por categoría. |
-| `RECUR.JS` | 1907–1982 | Gastos fijos mensuales y "aplicar al mes". |
-| `BUDGET.JS` | 1983–2009 | Límite mensual por categoría. |
-| `CATS.JS` | 2010–2110 | Administrador de categorías (nombre, emoji, color, esencial). |
-| `DATA.JS` | 2111–2189 | Exportar CSV / backup JSON, importar, borrar todo. |
-| `SUPABASE.JS` | 2190–2392 | Conexión **opcional** con la nube: config, login, **alta de cuenta (`sbSignUp`)**, `casaJoin()`, sesión, `pullMembers()` / `pullCasa()`. |
-| `SYNC.JS` | 2393–2571 | Motor de sincronización: push de lo sucio, pull incremental, merge last-write-wins. |
-| `REALTIME.JS` | 2572–2605 | Suscripción a `postgres_changes` (gastos, fijos, config y **personas**): lo que carga el otro aparece solo. |
-| `GATE.JS` | 2606–2736 | Pantalla de entrada con 3 modos: `login` / `signup` / `join`. Tapa la app cuando la nube está configurada. |
-| `NUBE_UI.JS` | 2737–2815 | Sección ☁ NUBE COMPARTIDA de la pestaña DATOS. |
-| `THEME.JS` | 2816–2832 | Tema claro / oscuro. |
-| `BOOT.JS` | 2833–2873 | Arranque, listeners de re-sync y registro del service worker. |
+| `CONST.JS` | 852–888 | Categorías y personas por defecto, teclas, emojis/colores, claves de localStorage. |
+| `STORE.JS` | 889–895 | `load()` / `save()` sobre localStorage. Todo el volumen de datos es chico; no hace falta IndexedDB. |
+| `STATE.JS` | 896–931 | Estado global: `expenses`, `recurring`, `budgets`, `CATEGORIES`, `PEOPLE`, `meId`, config de nube. |
+| `UTILS.JS` | 932–975 | `uid()`, `fmt()`, `pkey()` (clave normalizada de persona), `liveExpenses()` (filtra lápidas), `escapeHtml()`. |
+| `MUTATE.JS` | 976–1040 | **Toda escritura pasa por acá**: marca `updatedAt` + `_dirty` y dispara el push a la nube. Incluye borrado lógico, purga de lápidas y migración de datos viejos. |
+| `PEOPLE.JS` | 1041–1180 | Quién es quién: chip de usuario, selector "PAGÓ", modal "¿quién soy?", alta/baja de personas. **No hay personas precargadas.** |
+| `UI.JS` | 1181–1310 | Piezas compartidas: confirm propio, navegación entre vistas, display del monto, grilla de categorías, teclado, punto de sincronización. |
+| `TAGS.JS` | 1311–1353 | Etiquetas libres por gasto (máx. 5). |
+| `HOME.JS` | 1354–1408 | Pantalla de alta de gastos. |
+| `HISTORIAL.JS` | 1409–1521 | Lista del mes + filtros (persona / categoría / etiqueta) + swipe para borrar. |
+| `EDIT.JS` | 1522–1560 | Modal de edición de un gasto (incluye cambiar quién pagó). |
+| `DONUT.JS` | 1561–1660 | Dona de distribución por categoría, en SVG a mano (sin librerías de charts). |
+| `WHO.JS` | 1661–1725 | **Quién gastó**: totales por persona y balance "si parten todo a la mitad". |
+| `RESUMEN.JS` | 1726–1913 | Números del mes, evolución, día más caro, día de la semana, gastos hormiga, comparativa mes anterior, barras por categoría. |
+| `RECUR.JS` | 1914–1989 | Gastos fijos mensuales y "aplicar al mes". |
+| `BUDGET.JS` | 1990–2016 | Límite mensual por categoría. |
+| `CATS.JS` | 2017–2117 | Administrador de categorías (nombre, emoji, color, esencial). |
+| `DATA.JS` | 2118–2196 | Exportar CSV / backup JSON, importar, borrar todo. |
+| `SUPABASE.JS` | 2197–2399 | Conexión **opcional** con la nube: config, login, **alta de cuenta (`sbSignUp`)**, `casaJoin()`, sesión, `pullMembers()` / `pullCasa()`. |
+| `SYNC.JS` | 2400–2578 | Motor de sincronización: push de lo sucio, pull incremental, merge last-write-wins. |
+| `REALTIME.JS` | 2579–2612 | Suscripción a `postgres_changes` (gastos, fijos, config y **personas**): lo que carga el otro aparece solo. |
+| `GATE.JS` | 2613–2743 | Pantalla de entrada con 3 modos: `login` / `signup` / `join`. Tapa la app cuando la nube está configurada. |
+| `NUBE_UI.JS` | 2744–2822 | Sección ☁ NUBE COMPARTIDA de la pestaña DATOS. |
+| `THEME.JS` | 2823–2839 | Tema claro / oscuro. |
+| `BOOT.JS` | 2840–2881 | Arranque, listeners de re-sync y registro del service worker. |
 
 > Los rangos se mueven al editar. Si algo no cuadra, reubicá con
 > `Grep -n "^// NOMBRE.JS"` y leé el banner.
@@ -277,6 +277,13 @@ Reglas del motor, que hay que respetar si se toca:
   como borrado y lo sincroniza). El texto del confirm lo dice explícito.
 - **Moneda**: se formatea con `toLocaleString("es-CL")` y símbolo `$`, sin
   decimales (los montos se redondean al mostrar).
+- **El teclado numérico NO se puede mover.** El alto del `.display` es fijo:
+  `.display-preview` y `.last-added` reservan su renglón siempre (se ocultan
+  con `.oculto`/`visibility`, **nunca** con `display:none`) y no envuelven a
+  dos líneas. Si el display cambia de alto, el teclado se corre solo entre
+  tecla y tecla y se termina cargando otro número. Ojo también con los
+  nombres de clase: la clase genérica `.empty` (mensajes de lista vacía)
+  lleva `padding:40px` — el display del monto usa `.is-empty`, no `.empty`.
 - **Gastos hormiga**: se consideran los de menos de $5.000, y se avisa a
   partir de 3 en la misma categoría en el mes.
 

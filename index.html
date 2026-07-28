@@ -90,10 +90,17 @@
     .display-amount { display:flex; align-items:baseline; gap:3px; line-height:1; }
     .display-currency { font-size:15px; font-weight:700; color:var(--gold); }
     .display-digits { font-size:30px; font-weight:700; color:var(--gold); letter-spacing:.04em; font-variant-numeric:tabular-nums; }
-    .display-digits.empty { color:var(--text-dead); }
+    .display-digits.is-empty { color:var(--text-dead); }
     .display-cursor { font-size:26px; color:var(--gold); font-weight:200; animation:blink 1s infinite; margin-left:1px; align-self:flex-end; margin-bottom:1px; line-height:1; }
-    .display-preview { font-size:10px; color:var(--preview-color); margin-top:3px; font-style:italic; }
-    .last-added { font-size:10px; color:var(--green); margin-top:3px; letter-spacing:.05em; }
+    /* OJO: el alto del display NO puede cambiar mientras se tipea. Si cambia,
+       el teclado se mueve solo y se termina tocando la tecla equivocada. Por eso
+       estas dos líneas reservan su renglón siempre, aunque estén vacías, y nunca
+       envuelven a dos renglones. Se muestran/ocultan con .oculto (visibility),
+       NO con display:none. */
+    .display-preview, .last-added { height:13px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; margin-top:3px; font-size:10px; }
+    .display-preview { color:var(--preview-color); font-style:italic; }
+    .last-added { color:var(--green); letter-spacing:.05em; }
+    .oculto { visibility:hidden; }
 
     /* CAT ROW */
     .cat-row { display:flex; gap:5px; margin-bottom:6px; flex-shrink:0; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; padding-bottom:2px; }
@@ -483,11 +490,11 @@
       <div class="display-label">MONTO</div>
       <div class="display-amount">
         <span class="display-currency">$</span>
-        <span class="display-digits empty" id="digits-home">0</span>
+        <span class="display-digits is-empty" id="digits-home">0</span>
         <span class="display-cursor" id="cursor-home" style="display:none">_</span>
       </div>
-      <div class="display-preview" id="preview-home" style="display:none"></div>
-      <div class="last-added" id="last-added" style="display:none"></div>
+      <div class="display-preview oculto" id="preview-home"></div>
+      <div class="last-added oculto" id="last-added"></div>
     </div>
     <div class="payer-row" id="payer-row-home"></div>
     <div class="cat-row" id="cat-grid-home"></div>
@@ -707,10 +714,10 @@
         <div class="display-label">MONTO</div>
         <div class="display-amount">
           <span class="display-currency">$</span>
-          <span class="display-digits empty" id="digits-edit">0</span>
+          <span class="display-digits is-empty" id="digits-edit">0</span>
           <span class="display-cursor" id="cursor-edit" style="display:none">_</span>
         </div>
-        <div class="display-preview" id="preview-edit" style="display:none"></div>
+        <div class="display-preview oculto" id="preview-edit"></div>
       </div>
       <div class="payer-row" id="payer-row-edit"></div>
       <div class="cat-row" id="cat-grid-edit"></div>
@@ -738,10 +745,10 @@
         <div class="display-label">MONTO</div>
         <div class="display-amount">
           <span class="display-currency">$</span>
-          <span class="display-digits empty" id="digits-recur">0</span>
+          <span class="display-digits is-empty" id="digits-recur">0</span>
           <span class="display-cursor" id="cursor-recur" style="display:none">_</span>
         </div>
-        <div class="display-preview" id="preview-recur" style="display:none"></div>
+        <div class="display-preview oculto" id="preview-recur"></div>
       </div>
       <div class="cat-row" id="cat-grid-recur"></div>
       <input class="note-input" id="note-recur" type="text" placeholder="Descripción..." maxlength="40"/>
@@ -1215,14 +1222,14 @@ function updateDisplay(suffix, val) {
   const cursor  = $("cursor-"+suffix);
   const preview = $("preview-"+suffix);
   if (val) {
-    digits.textContent = val; digits.classList.remove("empty");
+    digits.textContent = val; digits.classList.remove("is-empty");
     cursor.style.display = "inline";
     const n = parseFloat(val);
-    if (n > 0) { preview.style.display = "block"; preview.textContent = "= " + fmt(n); }
-    else preview.style.display = "none";
+    if (n > 0) { preview.classList.remove("oculto"); preview.textContent = "= " + fmt(n); }
+    else preview.classList.add("oculto");
   } else {
-    digits.textContent = "0"; digits.classList.add("empty");
-    cursor.style.display = "none"; preview.style.display = "none";
+    digits.textContent = "0"; digits.classList.add("is-empty");
+    cursor.style.display = "none"; preview.classList.add("oculto");
   }
 }
 
@@ -1387,7 +1394,7 @@ $("add-btn").addEventListener("click", () => {
   const la = $("last-added");
   const cat = catById(homeCat);
   la.textContent = `✓ ${fmt(amount)} en ${cat.label} · ${payer.name}${homeRecurring ? " · guardado como fijo" : ""}`;
-  la.style.display = "block";
+  la.classList.remove("oculto");
 
   homeInput = ""; homeCat = null; homeRecurring = false; homeTags = [];
   $("note-home").value = "";
