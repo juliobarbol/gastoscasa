@@ -1,0 +1,7 @@
+wrangler.jsonc
+.assetsignore
+README.md
+schema.sql
+CLAUDE.md
+build.py
+.claude/

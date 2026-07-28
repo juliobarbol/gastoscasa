@@ -1,0 +1,2641 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="theme-color" content="#080808" id="meta-theme"/>
+  <title>Gastos Casa</title>
+  <link rel="manifest" href="manifest.webmanifest"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script>
+    // Tema aplicado ANTES de pintar, para que no haya flash blanco/negro.
+    (function () {
+      try {
+        var light = JSON.parse(localStorage.getItem('gastos_theme')) === true;
+        if (light) document.documentElement.classList.add('light');
+        var m = document.getElementById('meta-theme');
+        if (m) m.setAttribute('content', light ? '#f7f6f1' : '#080808');
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    /* ── DARK THEME (default) ── */
+    :root {
+      --bg:#080808; --bg2:#0d0d0d; --bg3:#141414;
+      --border:#252525; --border2:#333333;
+      --gold:#f59e0b; --green:#10b981; --red:#ef4444; --blue:#3b82f6;
+      /* Alto contraste en oscuro: blanco puro para texto principal */
+      --text:#ffffff; --text-dim:#b0b0b0; --text-mute:#606060; --text-dead:#303030;
+      --font:'IBM Plex Mono',monospace;
+      --vital-bg:#0a1a0f; --vital-border:#1e4025; --vital-label:#34d399;
+      --preview-color:#707070; --note-ph:#404040; --trend-inactive:#2a2a2a;
+      --shadow-key:none;
+    }
+
+    /* ── LIGHT THEME ── */
+    html.light {
+      --bg:#f7f6f1; --bg2:#eeede8; --bg3:#e4e3de;
+      --border:#c8c7c0; --border2:#b0afaa;
+      --gold:#b45309; --green:#065f46; --red:#b91c1c; --blue:#1e40af;
+      /* Alto contraste en claro: negro puro para texto principal */
+      --text:#0a0a0a; --text-dim:#2a2a2a; --text-mute:#6b6b6b; --text-dead:#c0bfba;
+      --vital-bg:#ecfdf5; --vital-border:#6ee7b7; --vital-label:#064e3b;
+      --preview-color:#707070; --note-ph:#a0a0a0; --trend-inactive:#c8c7c0;
+      --shadow-key:0 1px 3px rgba(0,0,0,.15);
+    }
+
+    html,body { height:100%; background:var(--bg); color:var(--text); font-family:var(--font); overscroll-behavior:none; transition:background .2s,color .2s; }
+    #app { max-width:480px; margin:0 auto; min-height:100dvh; display:flex; flex-direction:column; position:relative; }
+
+    /* HEADER */
+    .header { display:flex; justify-content:space-between; align-items:center; padding:8px 14px; border-bottom:1px solid var(--border); flex-shrink:0; gap:8px; }
+    .header-left { display:flex; align-items:center; gap:8px; min-width:0; }
+    .logo { font-size:20px; color:var(--gold); }
+    .logo-text { font-size:13px; font-weight:700; letter-spacing:.15em; color:var(--gold); }
+    .month-badge { font-size:9px; font-weight:500; letter-spacing:.12em; color:var(--text-mute); background:var(--bg3); padding:4px 8px; border:1px solid var(--border2); }
+
+    /* USER CHIP + SYNC DOT */
+    .user-chip { display:flex; align-items:center; gap:5px; font-size:9px; font-weight:700; letter-spacing:.1em; padding:4px 8px; border:1px solid var(--border2); border-radius:20px; background:var(--bg3); cursor:pointer; white-space:nowrap; max-width:110px; overflow:hidden; text-overflow:ellipsis; }
+    .user-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .sync-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; background:var(--text-dead); transition:background .3s; }
+    .sync-dot.ok { background:var(--green); }
+    .sync-dot.pending { background:var(--gold); animation:pulse 1.2s infinite; }
+    .sync-dot.error { background:var(--red); }
+    .sync-dot.off { background:var(--text-dead); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+
+    .icon-square { background:none; border:1px solid var(--border2); color:var(--text-mute); width:28px; height:28px; cursor:pointer; border-radius:4px; font-size:15px; display:flex; align-items:center; justify-content:center; transition:all .15s; flex-shrink:0; font-family:var(--font); }
+
+    /* NAV */
+    .nav { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; overflow-x:auto; scrollbar-width:none; }
+    .nav::-webkit-scrollbar { display:none; }
+    .nav-btn { flex:1; background:none; border:none; border-bottom:2px solid transparent; color:var(--text-mute); font-family:var(--font); font-size:8px; font-weight:600; letter-spacing:.08em; padding:7px 4px; cursor:pointer; transition:color .15s,border-color .15s; white-space:nowrap; min-width:52px; }
+    .nav-btn.active { color:var(--gold); border-bottom-color:var(--gold); }
+
+    /* VIEWS */
+    .view { display:none; flex:1; padding:12px 12px 80px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    .view.active { display:flex; flex-direction:column; }
+    #view-home { overflow:hidden; padding-bottom:56px; }
+
+    /* DISPLAY */
+    .display { background:var(--bg2); border:1px solid var(--border); padding:7px 14px; margin-bottom:7px; flex-shrink:0; }
+    .display-label { font-size:8px; letter-spacing:.2em; color:var(--text-mute); margin-bottom:2px; }
+    .display-amount { display:flex; align-items:baseline; gap:3px; line-height:1; }
+    .display-currency { font-size:15px; font-weight:700; color:var(--gold); }
+    .display-digits { font-size:30px; font-weight:700; color:var(--gold); letter-spacing:.04em; font-variant-numeric:tabular-nums; }
+    .display-digits.empty { color:var(--text-dead); }
+    .display-cursor { font-size:26px; color:var(--gold); font-weight:200; animation:blink 1s infinite; margin-left:1px; align-self:flex-end; margin-bottom:1px; line-height:1; }
+    .display-preview { font-size:10px; color:var(--preview-color); margin-top:3px; font-style:italic; }
+    .last-added { font-size:10px; color:var(--green); margin-top:3px; letter-spacing:.05em; }
+
+    /* CAT ROW */
+    .cat-row { display:flex; gap:5px; margin-bottom:6px; flex-shrink:0; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; padding-bottom:2px; }
+    .cat-row::-webkit-scrollbar { display:none; }
+    .cat-btn { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:5px 8px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:2px; transition:all .15s; color:inherit; flex-shrink:0; min-width:50px; }
+    .cat-btn:active { transform:scale(.95); }
+    .cat-emoji { font-size:18px; line-height:1; }
+    .cat-label { font-family:var(--font); font-size:8px; letter-spacing:.04em; font-weight:500; color:#555; white-space:nowrap; }
+
+    /* NOTE */
+    .note-input { width:100%; background:var(--bg2); border:1px solid var(--border); border-top:none; color:var(--text-dim); font-family:var(--font); font-size:11px; padding:5px 12px; outline:none; margin-bottom:6px; letter-spacing:.05em; flex-shrink:0; }
+    .note-input::placeholder { color:var(--note-ph); }
+
+    /* PAGADO POR (selector de persona en el alta) */
+    .payer-row { display:flex; gap:5px; margin-bottom:6px; flex-shrink:0; align-items:center; overflow-x:auto; scrollbar-width:none; }
+    .payer-row::-webkit-scrollbar { display:none; }
+    .payer-caption { font-size:8px; letter-spacing:.12em; color:var(--text-mute); flex-shrink:0; margin-right:2px; }
+    .payer-btn { background:var(--bg3); border:1px solid var(--border); border-radius:20px; padding:5px 11px; font-family:var(--font); font-size:9px; font-weight:600; letter-spacing:.06em; color:var(--text-mute); cursor:pointer; white-space:nowrap; flex-shrink:0; transition:all .15s; }
+    .payer-btn.locked { cursor:default; }
+
+    /* RECURRING TOGGLE IN FORM */
+    .recur-toggle { display:flex; align-items:center; gap:8px; margin-bottom:6px; padding:5px 10px; background:var(--bg3); border:1px solid var(--border); border-radius:4px; cursor:pointer; flex-shrink:0; }
+    .recur-toggle-label { font-size:9px; color:var(--text-mute); letter-spacing:.06em; flex:1; }
+    .recur-toggle-icon { font-size:14px; }
+    .switch { width:32px; height:18px; background:var(--border2); border-radius:9px; position:relative; transition:background .2s; flex-shrink:0; }
+    .switch.on { background:#8b5cf6; }
+    .switch::after { content:''; position:absolute; top:3px; left:3px; width:12px; height:12px; background:#fff; border-radius:50%; transition:transform .2s; }
+    .switch.on::after { transform:translateX(14px); }
+
+    /* KEYPAD */
+    .keypad { display:flex; flex-direction:column; gap:4px; flex-shrink:0; }
+    .key-row { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
+    .key { background:var(--bg3); border:1px solid var(--border); color:var(--text-dim); box-shadow:var(--shadow-key); font-family:var(--font); font-size:18px; font-weight:500; padding:9px 0; cursor:pointer; border-radius:4px; transition:background .1s,transform .1s; user-select:none; }
+    .key:active { transform:scale(.93); background:var(--border2); }
+    .key.del { color:var(--gold); font-size:14px; }
+
+    /* ADD BUTTON */
+    .add-btn { background:var(--gold); border:none; color:#000; font-family:var(--font); font-size:12px; font-weight:700; letter-spacing:.15em; padding:11px; cursor:pointer; border-radius:4px; width:100%; margin-top:4px; transition:opacity .2s; flex-shrink:0; }
+    .add-btn:disabled { opacity:.3; cursor:default; }
+    .add-btn.green { background:var(--green); color:#fff; }
+    .add-btn.purple { background:#8b5cf6; color:#fff; }
+
+    /* SECTION TITLE */
+    .section-title { font-size:9px; letter-spacing:.2em; color:var(--text-mute); margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+    .section-title-action { font-size:9px; color:var(--gold); cursor:pointer; letter-spacing:.05em; }
+
+    /* EXPENSE LIST */
+    .expense-row { display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--border); animation:slideIn .2s ease; position:relative; overflow:hidden; }
+    .expense-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+    .expense-info { flex:1; min-width:0; }
+    .expense-cat { font-size:12px; font-weight:500; color:var(--text-dim); display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+    .recur-badge { font-size:8px; color:#8b5cf6; border:1px solid #8b5cf644; padding:1px 4px; border-radius:2px; letter-spacing:.05em; }
+    .person-badge { font-size:8px; padding:1px 5px; border-radius:10px; letter-spacing:.06em; font-weight:700; border:1px solid; }
+    .expense-note { font-size:10px; color:var(--text-mute); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .expense-date { font-size:9px; color:var(--text-dead); margin-top:2px; letter-spacing:.05em; }
+    .expense-right { display:flex; flex-direction:column; align-items:flex-end; gap:5px; flex-shrink:0; }
+    .expense-amount { font-size:14px; font-weight:700; }
+    .action-btns { display:flex; gap:4px; }
+    .icon-btn { background:none; border:1px solid var(--border2); color:var(--text-mute); width:28px; height:28px; cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center; border-radius:2px; padding:0; transition:all .15s; line-height:1; font-family:var(--font); }
+    .icon-btn:hover { border-color:var(--text-mute); color:var(--text-dim); }
+    .icon-btn.del-icon:hover { border-color:#5a1a1a; color:#f87171; }
+    /* Swipe delete overlay */
+    .swipe-delete { position:absolute; right:0; top:0; bottom:0; background:var(--red); display:flex; align-items:center; padding:0 16px; font-size:11px; font-weight:700; letter-spacing:.1em; color:#fff; transform:translateX(100%); transition:transform .2s; pointer-events:none; }
+    .expense-row.swiping .swipe-delete { pointer-events:auto; }
+
+    /* HISTORIAL FILTER */
+    .filter-row { display:flex; gap:6px; margin-bottom:8px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
+    .filter-row::-webkit-scrollbar { display:none; }
+    .filter-chip { background:var(--bg3); border:1px solid var(--border); border-radius:20px; padding:5px 12px; font-size:9px; font-family:var(--font); letter-spacing:.06em; color:var(--text-mute); cursor:pointer; white-space:nowrap; transition:all .15s; flex-shrink:0; }
+    .filter-chip.active { border-color:var(--gold); color:var(--gold); background:var(--gold)12; }
+    .filter-chip.active-tag { border-color:#3b82f6; color:#3b82f6; background:#3b82f612; }
+
+    /* CONFIRM DIALOG */
+    .confirm-overlay { position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .confirm-box { background:var(--bg2); border:1px solid var(--border2); padding:24px; max-width:320px; width:100%; animation:modalIn .2s ease; }
+    .confirm-title { font-size:12px; font-weight:700; letter-spacing:.1em; color:var(--text); margin-bottom:8px; }
+    .confirm-msg { font-size:11px; color:var(--text-mute); margin-bottom:20px; line-height:1.6; }
+    .confirm-btns { display:flex; gap:8px; }
+    .confirm-btn { flex:1; padding:12px; border:none; font-family:var(--font); font-size:11px; font-weight:700; letter-spacing:.1em; cursor:pointer; border-radius:3px; }
+    .confirm-btn.cancel { background:var(--bg3); color:var(--text-mute); border:1px solid var(--border); }
+    .confirm-btn.danger { background:var(--red); color:#fff; }
+
+    /* RESUMEN */
+    .vital-card { background:var(--vital-bg); border:1px solid var(--vital-border); padding:18px; margin-bottom:14px; }
+    .vital-label { font-size:9px; letter-spacing:.2em; color:var(--vital-label); margin-bottom:6px; }
+    .vital-amount { font-size:34px; font-weight:700; color:var(--green); letter-spacing:-.02em; }
+    .vital-sub { font-size:10px; color:var(--vital-label); margin-top:3px; }
+    .vital-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+    .vital-tag { font-size:8px; border:1px solid; padding:2px 6px; letter-spacing:.1em; font-weight:600; }
+
+    .stat-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px; }
+    .stat-card { background:var(--bg2); border:1px solid var(--border); padding:12px 14px; }
+    .stat-label { font-size:8px; letter-spacing:.15em; color:var(--text-mute); margin-bottom:6px; }
+    .stat-value { font-size:18px; font-weight:700; color:var(--text); }
+    .stat-value.gold { color:var(--gold); }
+    .stat-value.green { color:var(--green); }
+    .stat-sub { font-size:9px; color:var(--text-mute); margin-top:3px; }
+
+    .total-row { display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border); margin-bottom:16px; }
+    .total-label { font-size:9px; letter-spacing:.2em; color:var(--text-mute); }
+    .total-amount { font-size:22px; font-weight:700; color:var(--gold); }
+
+    .bar-row { margin-bottom:12px; }
+    .bar-label { display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px; color:var(--text-dim); align-items:center; }
+    .bar-budget-info { font-size:9px; }
+    .bar-track { background:var(--bg3); height:5px; border-radius:2px; overflow:hidden; }
+    .bar-fill { height:100%; border-radius:2px; transition:width .4s ease; }
+    .bar-pct { font-size:9px; margin-top:3px; display:flex; justify-content:space-between; }
+
+    /* TREND CHART */
+    .trend-chart { background:var(--bg2); border:1px solid var(--border); padding:14px; margin-bottom:16px; }
+    .trend-label { font-size:9px; letter-spacing:.15em; color:var(--text-mute); margin-bottom:12px; }
+    .trend-bars { display:flex; align-items:flex-end; gap:4px; height:60px; }
+    .trend-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; height:100%; justify-content:flex-end; }
+    .trend-bar { width:100%; border-radius:2px 2px 0 0; min-height:2px; transition:height .4s ease; }
+    .trend-mo { font-size:7px; color:var(--text-mute); letter-spacing:.03em; text-align:center; margin-top:4px; }
+    .trend-val { font-size:7px; color:var(--text-dim); }
+
+    .month-row { display:flex; justify-content:space-between; align-items:center; padding:11px 0; border-bottom:1px solid var(--border); }
+    .month-label { font-size:10px; color:var(--text-mute); letter-spacing:.1em; }
+    .month-essential { font-size:9px; color:var(--green); margin-top:3px; }
+    .month-total { font-size:16px; font-weight:700; color:var(--text-dim); }
+
+    /* QUIÉN GASTÓ */
+    .who-row { display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--border); }
+    .who-row:last-child { border-bottom:none; }
+    .who-avatar { width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; border:1px solid; }
+    .who-info { flex:1; min-width:0; }
+    .who-name { font-size:12px; font-weight:600; }
+    .who-track { background:var(--bg3); height:4px; border-radius:2px; overflow:hidden; margin-top:5px; }
+    .who-fill { height:100%; border-radius:2px; transition:width .4s ease; }
+    .who-right { text-align:right; flex-shrink:0; }
+    .who-total { font-size:14px; font-weight:700; }
+    .who-pct { font-size:9px; color:var(--text-mute); margin-top:2px; }
+    .who-balance { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); font-size:10px; line-height:1.7; color:var(--text-dim); }
+    .who-balance strong { color:var(--gold); }
+
+    /* RECURRING VIEW */
+    .recur-row { display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--border); }
+    .recur-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+    .recur-info { flex:1; min-width:0; }
+    .recur-name { font-size:12px; font-weight:500; color:var(--text-dim); }
+    .recur-cat { font-size:9px; color:var(--text-mute); margin-top:2px; }
+    .recur-right { display:flex; flex-direction:column; align-items:flex-end; gap:5px; flex-shrink:0; }
+    .recur-amount { font-size:14px; font-weight:700; color:#8b5cf6; }
+
+    /* BUDGET VIEW */
+    .budget-input-row { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--border); }
+    .budget-cat-info { display:flex; align-items:center; gap:8px; flex:1; }
+    .budget-cat-emoji { font-size:18px; }
+    .budget-cat-label { font-size:11px; color:var(--text-dim); }
+    .budget-amount-input { background:var(--bg3); border:1px solid var(--border); color:var(--text); font-family:var(--font); font-size:13px; font-weight:700; padding:6px 10px; width:110px; outline:none; text-align:right; border-radius:3px; }
+    .budget-amount-input:focus { border-color:var(--gold); }
+    .budget-amount-input::placeholder { color:var(--text-dead); }
+
+    /* STRIP */
+    .strip { position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px; background:var(--bg2); border-top:1px solid var(--border); padding:7px 16px; display:flex; justify-content:space-between; align-items:center; z-index:50; }
+    .strip-label { font-size:9px; letter-spacing:.2em; color:var(--text-mute); }
+    .strip-total { font-size:16px; font-weight:700; color:var(--gold); }
+
+    /* MODAL */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.88); z-index:100; display:none; align-items:flex-end; justify-content:center; }
+    .modal-overlay.open { display:flex; }
+    .modal { background:var(--bg2); border:1px solid var(--border2); border-bottom:none; width:100%; max-width:480px; max-height:94dvh; overflow-y:auto; -webkit-overflow-scrolling:touch; padding:16px 16px 40px; animation:modalIn .28s ease; }
+    .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+    .modal-title { font-size:10px; letter-spacing:.2em; color:var(--gold); font-weight:700; }
+    .modal-close { background:none; border:1px solid var(--border2); color:var(--text-mute); width:28px; height:28px; cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center; border-radius:2px; line-height:1; font-family:monospace; }
+
+    /* BACKUP / SECCIONES DE CONFIG */
+    .backup-section { background:var(--bg2); border:1px solid var(--border); padding:16px; margin-bottom:12px; border-radius:6px; }
+    .backup-title { font-size:9px; letter-spacing:.2em; color:var(--text-mute); margin-bottom:12px; }
+    .backup-btn { width:100%; background:var(--bg3); border:1px solid var(--border2); color:var(--text-dim); font-family:var(--font); font-size:10px; font-weight:600; letter-spacing:.1em; padding:12px; cursor:pointer; border-radius:3px; margin-bottom:8px; transition:all .15s; }
+    .backup-btn:hover { border-color:var(--gold); color:var(--gold); }
+    .backup-btn.danger:hover { border-color:var(--red); color:var(--red); }
+    .backup-btn.primary { background:var(--gold); border-color:var(--gold); color:#000; }
+    .backup-hint { font-size:9px; color:var(--text-mute); line-height:1.6; margin-bottom:10px; }
+    #import-file { display:none; }
+
+    /* FORM FIELDS (nube / login) */
+    .field { margin-bottom:10px; }
+    .field-label { font-size:8px; letter-spacing:.15em; color:var(--text-mute); margin-bottom:4px; }
+    .field-input { width:100%; background:var(--bg3); border:1px solid var(--border); color:var(--text); font-family:var(--font); font-size:12px; padding:9px 11px; outline:none; border-radius:3px; letter-spacing:.03em; }
+    .field-input:focus { border-color:var(--gold); }
+    .field-input::placeholder { color:var(--text-dead); }
+    .status-line { font-size:10px; letter-spacing:.04em; line-height:1.6; margin-bottom:10px; color:var(--text-dim); }
+    .status-line b { color:var(--gold); }
+    .status-err { color:var(--red); }
+    .status-ok { color:var(--green); }
+
+    /* AUTH GATE */
+    .gate { position:fixed; inset:0; background:var(--bg); z-index:500; display:none; align-items:center; justify-content:center; padding:22px; }
+    .gate.open { display:flex; }
+    .gate-box { width:100%; max-width:340px; }
+    .gate-logo { text-align:center; margin-bottom:22px; }
+    .gate-logo .logo { font-size:38px; }
+    .gate-logo .logo-text { display:block; font-size:15px; margin-top:6px; }
+    .gate-sub { font-size:10px; color:var(--text-mute); text-align:center; margin-bottom:22px; letter-spacing:.08em; line-height:1.6; }
+    .gate-link { display:block; text-align:center; font-size:9px; color:var(--text-mute); margin-top:14px; cursor:pointer; letter-spacing:.08em; text-decoration:underline; }
+
+    /* EMPTY */
+    .empty { font-size:11px; color:var(--text-mute); text-align:center; padding:40px 0; letter-spacing:.1em; }
+
+    /* ANIMATIONS */
+    @keyframes blink { 0%,100%{opacity:.8} 50%{opacity:.1} }
+    @keyframes slideIn { from{transform:translateY(-6px);opacity:0} to{transform:translateY(0);opacity:1} }
+    @keyframes modalIn { from{transform:translateY(100%)} to{transform:translateY(0)} }
+    @keyframes flashGreen { 0%{background:transparent} 30%{background:#10b98122} 100%{background:transparent} }
+    ::-webkit-scrollbar { width:4px; }
+    ::-webkit-scrollbar-track { background:var(--bg); }
+    ::-webkit-scrollbar-thumb { background:var(--border2); border-radius:2px; }
+
+    /* TAGS */
+    .tag-input-wrap { display:flex; flex-direction:column; gap:4px; margin-bottom:6px; flex-shrink:0; }
+    .tag-input-row { display:flex; gap:6px; align-items:center; }
+    .tag-input { flex:1; background:var(--bg2); border:1px solid var(--border); color:var(--text-dim); font-family:var(--font); font-size:10px; padding:5px 10px; outline:none; letter-spacing:.05em; }
+    .tag-input::placeholder { color:var(--note-ph); }
+    .tag-add-btn { background:var(--bg3); border:1px solid var(--border2); color:var(--text-mute); font-family:var(--font); font-size:10px; padding:5px 9px; cursor:pointer; white-space:nowrap; transition:all .15s; }
+    .tag-add-btn:hover { border-color:var(--gold); color:var(--gold); }
+    .tag-pills { display:flex; flex-wrap:wrap; gap:5px; min-height:0; }
+    .tag-pill { display:inline-flex; align-items:center; gap:4px; background:var(--bg3); border:1px solid var(--border2); border-radius:20px; padding:3px 8px 3px 10px; font-size:9px; letter-spacing:.06em; color:var(--text-dim); cursor:default; }
+    .tag-pill-x { background:none; border:none; color:var(--text-mute); cursor:pointer; font-size:13px; line-height:1; padding:0; margin:0; font-family:monospace; }
+    .tag-pill-x:hover { color:var(--red); }
+    .expense-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; }
+    .expense-tag { font-size:8px; background:var(--bg3); border:1px solid var(--border2); border-radius:10px; padding:1px 6px; color:var(--text-mute); letter-spacing:.04em; cursor:pointer; }
+    .expense-tag:hover { border-color:var(--gold); color:var(--gold); }
+
+    /* ANALYSIS CARDS */
+    .analysis-block { background:var(--bg2); border:1px solid var(--border); padding:14px; margin-bottom:12px; }
+    .analysis-title { font-size:9px; letter-spacing:.18em; color:var(--text-mute); margin-bottom:12px; }
+
+    /* Comparativa mes vs mes anterior */
+    .comp-row { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); }
+    .comp-row:last-child { border-bottom:none; }
+    .comp-emoji { font-size:16px; width:22px; text-align:center; flex-shrink:0; }
+    .comp-label { flex:1; font-size:11px; color:var(--text-dim); }
+    .comp-prev { font-size:10px; color:var(--text-mute); width:72px; text-align:right; flex-shrink:0; }
+    .comp-curr { font-size:11px; font-weight:700; width:72px; text-align:right; flex-shrink:0; }
+    .comp-delta { font-size:9px; width:48px; text-align:right; flex-shrink:0; font-weight:600; }
+    .comp-delta.up { color:var(--red); }
+    .comp-delta.down { color:var(--green); }
+    .comp-delta.same { color:var(--text-mute); }
+    .comp-header { display:flex; gap:8px; padding-bottom:8px; margin-bottom:4px; border-bottom:1px solid var(--border); }
+    .comp-header span { font-size:8px; letter-spacing:.1em; color:var(--text-mute); }
+
+    /* Día de la semana */
+    .weekday-bars { display:flex; align-items:flex-end; gap:4px; height:50px; margin-top:4px; }
+    .weekday-wrap { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; height:100%; justify-content:flex-end; }
+    .weekday-bar { width:100%; border-radius:2px 2px 0 0; min-height:2px; }
+    .weekday-label { font-size:8px; color:var(--text-mute); letter-spacing:.02em; }
+    .weekday-label.peak { color:var(--gold); font-weight:700; }
+
+    /* Gastos hormiga */
+    .hormiga-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+    .hormiga-row:last-child { border-bottom:none; }
+    .hormiga-info { flex:1; }
+    .hormiga-label { font-size:11px; color:var(--text-dim); }
+    .hormiga-sub { font-size:9px; color:var(--text-mute); margin-top:2px; }
+    .hormiga-right { text-align:right; flex-shrink:0; }
+    .hormiga-total { font-size:13px; font-weight:700; }
+    .hormiga-count { font-size:9px; color:var(--text-mute); margin-top:2px; }
+    @media (hover:hover) { .key:hover { background:var(--border2); } .cat-btn:hover { border-color:var(--border2); } }
+
+    /* DONUT CHART */
+    .donut-wrap { background:var(--bg2); border:1px solid var(--border); padding:16px; margin-bottom:12px; }
+    .donut-title { font-size:9px; letter-spacing:.18em; color:var(--text-mute); margin-bottom:14px; }
+    .donut-body { display:flex; align-items:center; gap:16px; }
+    .donut-svg-wrap { position:relative; flex-shrink:0; }
+    .donut-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; pointer-events:none; }
+    .donut-center-label { font-size:8px; letter-spacing:.12em; color:var(--text-mute); }
+    .donut-center-amount { font-size:14px; font-weight:700; color:var(--gold); margin-top:1px; }
+    .donut-legend { flex:1; display:flex; flex-direction:column; gap:5px; min-width:0; }
+    .donut-legend-item { display:flex; align-items:center; gap:7px; cursor:pointer; padding:2px 0; border-radius:3px; transition:opacity .15s; }
+    .donut-legend-item.dimmed { opacity:.3; }
+    .donut-legend-dot { width:9px; height:9px; border-radius:2px; flex-shrink:0; }
+    .donut-legend-label { font-size:10px; color:var(--text-dim); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .donut-legend-pct { font-size:10px; font-weight:700; flex-shrink:0; }
+    .donut-segment { transition:opacity .2s, transform .2s; transform-origin:center; cursor:pointer; }
+    .donut-segment:hover { opacity:.85; }
+    .donut-empty { font-size:11px; color:var(--text-mute); text-align:center; padding:24px 0; }
+
+    /* CATEGORY MANAGER */
+    .cat-manager-row { display:flex; align-items:center; gap:10px; padding:12px 0; border-bottom:1px solid var(--border); animation:slideIn .2s ease; }
+    .cat-manager-swatch { width:36px; height:36px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; cursor:pointer; border:2px solid transparent; transition:border-color .15s; }
+    .cat-manager-info { flex:1; min-width:0; }
+    .cat-manager-label { font-size:13px; font-weight:600; color:var(--text); }
+    .cat-manager-meta { font-size:9px; color:var(--text-mute); margin-top:2px; letter-spacing:.05em; }
+    .cat-manager-actions { display:flex; gap:4px; flex-shrink:0; }
+
+    /* Cat editor modal inner */
+    .cat-editor { display:flex; flex-direction:column; gap:12px; }
+    .cat-editor-label { font-size:9px; letter-spacing:.15em; color:var(--text-mute); margin-bottom:4px; }
+    .cat-editor-input { width:100%; background:var(--bg3); border:1px solid var(--border); color:var(--text); font-family:var(--font); font-size:14px; padding:9px 12px; outline:none; border-radius:3px; letter-spacing:.04em; }
+    .cat-editor-input:focus { border-color:var(--gold); }
+    .emoji-picker { display:grid; grid-template-columns:repeat(8,1fr); gap:4px; max-height:140px; overflow-y:auto; }
+    .emoji-opt { font-size:22px; padding:6px; cursor:pointer; text-align:center; border-radius:4px; border:2px solid transparent; transition:all .1s; }
+    .emoji-opt:hover { background:var(--bg3); }
+    .emoji-opt.selected { border-color:var(--gold); background:var(--bg3); }
+    .color-picker { display:flex; flex-wrap:wrap; gap:6px; }
+    .color-opt { width:28px; height:28px; border-radius:50%; cursor:pointer; border:3px solid transparent; transition:all .15s; flex-shrink:0; }
+    .color-opt.selected { border-color:var(--text); transform:scale(1.15); }
+    .essential-toggle { display:flex; align-items:center; gap:10px; padding:8px 10px; background:var(--bg3); border:1px solid var(--border); border-radius:4px; cursor:pointer; }
+    .essential-toggle-label { flex:1; font-size:10px; color:var(--text-mute); letter-spacing:.06em; }
+
+    /* PERSONAS (modal) */
+    .person-row { display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid var(--border); }
+    .person-row:last-child { border-bottom:none; }
+    .person-check { font-size:14px; width:18px; flex-shrink:0; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════ AUTH GATE (tapa la app si hay nube y no hay sesión) ══════════ -->
+<div class="gate" id="auth-gate">
+  <div class="gate-box">
+    <div class="gate-logo">
+      <span class="logo">⬡</span>
+      <span class="logo-text">GASTOS CASA</span>
+    </div>
+    <div class="gate-sub">Iniciá sesión para ver y cargar<br>los gastos compartidos.</div>
+    <div class="field">
+      <div class="field-label">EMAIL</div>
+      <input class="field-input" id="gate-email" type="email" autocomplete="username" inputmode="email" placeholder="tu@email.com"/>
+    </div>
+    <div class="field">
+      <div class="field-label">CONTRASEÑA</div>
+      <input class="field-input" id="gate-pass" type="password" autocomplete="current-password" placeholder="••••••••"/>
+    </div>
+    <div class="status-line" id="gate-status"></div>
+    <button class="add-btn" id="gate-login-btn">ENTRAR</button>
+    <span class="gate-link" id="gate-config-link">Configurar conexión</span>
+    <span class="gate-link" id="gate-offline-link">Usar sin nube (solo este teléfono)</span>
+  </div>
+</div>
+
+<div id="app">
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <span class="logo">⬡</span>
+      <span class="logo-text">GASTOS</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:7px">
+      <span class="sync-dot off" id="sync-dot" title="Estado de sincronización"></span>
+      <div class="month-badge" id="month-badge"></div>
+      <div class="user-chip" id="user-chip" title="Quién soy"><span class="user-dot" id="user-dot"></span><span id="user-name">—</span></div>
+      <button class="icon-square" id="theme-toggle" title="Cambiar tema">🌙</button>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <div class="nav">
+    <button class="nav-btn active" data-view="home">AGREGAR</button>
+    <button class="nav-btn" data-view="historial">HISTORIAL</button>
+    <button class="nav-btn" data-view="resumen">RESUMEN</button>
+    <button class="nav-btn" data-view="recurrentes">FIJOS</button>
+    <button class="nav-btn" data-view="presupuesto">LÍMITES</button>
+    <button class="nav-btn" data-view="categorias">CATEG.</button>
+    <button class="nav-btn" data-view="datos">DATOS</button>
+  </div>
+
+  <!-- VIEW: HOME -->
+  <div id="view-home" class="view active">
+    <div class="display" id="display-home">
+      <div class="display-label">MONTO</div>
+      <div class="display-amount">
+        <span class="display-currency">$</span>
+        <span class="display-digits empty" id="digits-home">0</span>
+        <span class="display-cursor" id="cursor-home" style="display:none">_</span>
+      </div>
+      <div class="display-preview" id="preview-home" style="display:none"></div>
+      <div class="last-added" id="last-added" style="display:none"></div>
+    </div>
+    <div class="payer-row" id="payer-row-home"></div>
+    <div class="cat-row" id="cat-grid-home"></div>
+    <input class="note-input" id="note-home" type="text" placeholder="Descripción (opcional)..." maxlength="40"/>
+    <div class="tag-input-wrap" id="tag-wrap-home">
+      <div class="tag-input-row">
+        <input class="tag-input" id="tag-input-home" type="text" placeholder="Agregar etiqueta..." maxlength="20"/>
+        <button class="tag-add-btn" id="tag-add-home">+ Etiqueta</button>
+      </div>
+      <div class="tag-pills" id="tag-pills-home"></div>
+    </div>
+    <div class="recur-toggle" id="recur-toggle-btn">
+      <span class="recur-toggle-icon">🔁</span>
+      <span class="recur-toggle-label">Gasto fijo mensual</span>
+      <div class="switch" id="recur-switch"></div>
+    </div>
+    <div class="keypad" id="keypad-home"></div>
+    <button class="add-btn" id="add-btn" disabled>REGISTRAR GASTO</button>
+  </div>
+
+  <!-- VIEW: HISTORIAL -->
+  <div id="view-historial" class="view">
+    <div class="section-title">
+      <span id="hist-title">ESTE MES</span>
+    </div>
+    <div class="filter-row" id="person-filter-row"></div>
+    <div class="filter-row" id="filter-row"></div>
+    <div id="expense-list"></div>
+  </div>
+
+  <!-- VIEW: RESUMEN -->
+  <div id="view-resumen" class="view">
+    <div class="vital-card">
+      <div class="vital-label">MÍNIMO VITAL ESTIMADO</div>
+      <div class="vital-amount" id="vital-amount">$0</div>
+      <div class="vital-sub">gastos esenciales de este mes</div>
+      <div class="vital-tags" id="vital-tags"></div>
+    </div>
+
+    <!-- QUIÉN GASTÓ -->
+    <div class="analysis-block" id="analysis-who">
+      <div class="analysis-title">QUIÉN GASTÓ ESTE MES</div>
+      <div id="who-list"></div>
+      <div class="who-balance" id="who-balance"></div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="stat-label">PROMEDIO MENSUAL</div>
+        <div class="stat-value gold" id="avg-monthly">$0</div>
+        <div class="stat-sub" id="avg-months-label">sin datos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">DÍA MÁS CARO</div>
+        <div class="stat-value green" id="most-expensive-day">—</div>
+        <div class="stat-sub" id="most-expensive-day-amount"></div>
+      </div>
+    </div>
+    <div class="trend-chart" id="trend-chart" style="display:none">
+      <div class="trend-label">EVOLUCIÓN MENSUAL</div>
+      <div class="trend-bars" id="trend-bars"></div>
+    </div>
+    <!-- DONUT CHART -->
+    <div class="donut-wrap" id="donut-wrap">
+      <div class="donut-title">DISTRIBUCIÓN DE GASTOS</div>
+      <div id="donut-content"></div>
+    </div>
+
+    <!-- ANÁLISIS -->
+    <div class="analysis-block" id="analysis-weekday">
+      <div class="analysis-title">DÍA DE LA SEMANA MÁS CARO</div>
+      <div class="weekday-bars" id="weekday-bars"></div>
+    </div>
+    <div class="analysis-block" id="analysis-hormiga">
+      <div class="analysis-title">GASTOS HORMIGA</div>
+      <div id="hormiga-list"></div>
+    </div>
+    <div class="analysis-block" id="analysis-comp" style="display:none">
+      <div class="analysis-title">ESTE MES VS MES ANTERIOR</div>
+      <div class="comp-header">
+        <span style="flex:1;padding-left:30px">CATEGORÍA</span>
+        <span style="width:72px;text-align:right" id="comp-prev-label">ANT.</span>
+        <span style="width:72px;text-align:right">ACTUAL</span>
+        <span style="width:48px;text-align:right">Δ</span>
+      </div>
+      <div id="comp-list"></div>
+      <div id="comp-total-row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:9px;letter-spacing:.15em;color:var(--text-mute)">TOTAL</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:11px;color:var(--text-mute)" id="comp-total-prev"></span>
+          <span style="font-size:14px;font-weight:700;color:var(--gold)" id="comp-total-curr"></span>
+          <span style="font-size:10px;font-weight:700" id="comp-total-delta"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="total-row">
+      <span class="total-label">TOTAL ESTE MES</span>
+      <span class="total-amount" id="resumen-total">$0</span>
+    </div>
+    <div class="section-title"><span>POR CATEGORÍA</span></div>
+    <div id="cat-bars"></div>
+    <div id="month-history"></div>
+  </div>
+
+  <!-- VIEW: RECURRENTES -->
+  <div id="view-recurrentes" class="view">
+    <div class="section-title">
+      <span>GASTOS FIJOS</span>
+      <span class="section-title-action" id="apply-recurring-btn">+ APLICAR AL MES</span>
+    </div>
+    <div id="recur-list"></div>
+    <div class="empty" id="recur-empty" style="display:none">Sin gastos fijos configurados.<br>Activa el switch 🔁 al registrar un gasto.</div>
+  </div>
+
+  <!-- VIEW: PRESUPUESTO -->
+  <div id="view-presupuesto" class="view">
+    <div class="section-title"><span>LÍMITE MENSUAL POR CATEGORÍA</span></div>
+    <div id="budget-list"></div>
+    <button class="add-btn green" id="save-budget-btn" style="margin-top:16px">GUARDAR LÍMITES</button>
+  </div>
+
+  <!-- VIEW: CATEGORIAS -->
+  <div id="view-categorias" class="view">
+    <div class="section-title">
+      <span>MIS CATEGORÍAS</span>
+      <span class="section-title-action" id="new-cat-btn">+ NUEVA</span>
+    </div>
+    <div id="cat-manager-list"></div>
+  </div>
+
+  <!-- VIEW: DATOS -->
+  <div id="view-datos" class="view">
+
+    <!-- NUBE -->
+    <div class="backup-section">
+      <div class="backup-title">☁ NUBE COMPARTIDA</div>
+      <div class="status-line" id="sb-status">Sin configurar.</div>
+
+      <!-- Config (oculta cuando ya está configurada) -->
+      <div id="sb-config-form">
+        <div class="field">
+          <div class="field-label">URL DEL PROYECTO SUPABASE</div>
+          <input class="field-input" id="sb-url" type="url" placeholder="https://xxxx.supabase.co"/>
+        </div>
+        <div class="field">
+          <div class="field-label">ANON KEY (PUBLISHABLE)</div>
+          <input class="field-input" id="sb-key" type="password" placeholder="eyJhbGciOi..."/>
+        </div>
+        <div class="field">
+          <div class="field-label">CASA (NAMESPACE)</div>
+          <input class="field-input" id="sb-ns" type="text" placeholder="casa"/>
+        </div>
+        <button class="backup-btn primary" id="sb-save-btn">GUARDAR CONEXIÓN</button>
+      </div>
+
+      <!-- Login (visible si hay config y no hay sesión) -->
+      <div id="sb-login-form" style="display:none">
+        <div class="field">
+          <div class="field-label">EMAIL</div>
+          <input class="field-input" id="sb-email" type="email" autocomplete="username" placeholder="tu@email.com"/>
+        </div>
+        <div class="field">
+          <div class="field-label">CONTRASEÑA</div>
+          <input class="field-input" id="sb-pass" type="password" autocomplete="current-password" placeholder="••••••••"/>
+        </div>
+        <button class="backup-btn primary" id="sb-login-btn">INICIAR SESIÓN</button>
+      </div>
+
+      <!-- Sesión iniciada -->
+      <div id="sb-session-box" style="display:none">
+        <button class="backup-btn" id="sb-sync-btn">⟳ Sincronizar ahora</button>
+        <button class="backup-btn" id="sb-logout-btn">Cerrar sesión</button>
+      </div>
+
+      <button class="backup-btn danger" id="sb-forget-btn" style="display:none">Olvidar conexión en este teléfono</button>
+    </div>
+
+    <!-- PERSONAS -->
+    <div class="backup-section">
+      <div class="backup-title">👥 PERSONAS DE LA CASA</div>
+      <div class="backup-hint" id="people-hint"></div>
+      <div id="people-list"></div>
+      <button class="backup-btn" id="add-person-btn">+ Agregar persona</button>
+    </div>
+
+    <div class="backup-section">
+      <div class="backup-title">EXPORTAR DATOS</div>
+      <button class="backup-btn" id="export-csv-btn">↓ Exportar historial como CSV</button>
+      <button class="backup-btn" id="export-json-btn">↓ Copia de seguridad (JSON)</button>
+    </div>
+    <div class="backup-section">
+      <div class="backup-title">IMPORTAR DATOS</div>
+      <button class="backup-btn" id="import-btn">↑ Restaurar desde copia de seguridad</button>
+      <input type="file" id="import-file" accept=".json"/>
+    </div>
+    <div class="backup-section">
+      <div class="backup-title">ZONA DE PELIGRO</div>
+      <button class="backup-btn danger" id="clear-btn">⚠ Borrar todos los datos</button>
+    </div>
+  </div>
+
+  <!-- STRIP -->
+  <div class="strip">
+    <span class="strip-label">MES ACTUAL</span>
+    <span class="strip-total" id="strip-total">$0</span>
+  </div>
+
+  <!-- MODAL: EDITAR GASTO -->
+  <div class="modal-overlay" id="modal-edit">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">EDITAR GASTO</span>
+        <button class="modal-close" id="modal-edit-close">×</button>
+      </div>
+      <div class="display">
+        <div class="display-label">MONTO</div>
+        <div class="display-amount">
+          <span class="display-currency">$</span>
+          <span class="display-digits empty" id="digits-edit">0</span>
+          <span class="display-cursor" id="cursor-edit" style="display:none">_</span>
+        </div>
+        <div class="display-preview" id="preview-edit" style="display:none"></div>
+      </div>
+      <div class="payer-row" id="payer-row-edit"></div>
+      <div class="cat-row" id="cat-grid-edit"></div>
+      <input class="note-input" id="note-edit" type="text" placeholder="Descripción (opcional)..." maxlength="40"/>
+      <div class="tag-input-wrap" id="tag-wrap-edit">
+        <div class="tag-input-row">
+          <input class="tag-input" id="tag-input-edit" type="text" placeholder="Agregar etiqueta..." maxlength="20"/>
+          <button class="tag-add-btn" id="tag-add-edit">+ Etiqueta</button>
+        </div>
+        <div class="tag-pills" id="tag-pills-edit"></div>
+      </div>
+      <div class="keypad" id="keypad-edit"></div>
+      <button class="add-btn green" id="save-edit-btn" disabled>GUARDAR CAMBIOS</button>
+    </div>
+  </div>
+
+  <!-- MODAL: EDITAR RECURRENTE -->
+  <div class="modal-overlay" id="modal-recur">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">EDITAR GASTO FIJO</span>
+        <button class="modal-close" id="modal-recur-close">×</button>
+      </div>
+      <div class="display">
+        <div class="display-label">MONTO</div>
+        <div class="display-amount">
+          <span class="display-currency">$</span>
+          <span class="display-digits empty" id="digits-recur">0</span>
+          <span class="display-cursor" id="cursor-recur" style="display:none">_</span>
+        </div>
+        <div class="display-preview" id="preview-recur" style="display:none"></div>
+      </div>
+      <div class="cat-row" id="cat-grid-recur"></div>
+      <input class="note-input" id="note-recur" type="text" placeholder="Descripción..." maxlength="40"/>
+      <div class="keypad" id="keypad-recur"></div>
+      <button class="add-btn purple" id="save-recur-btn" disabled>GUARDAR GASTO FIJO</button>
+    </div>
+  </div>
+
+  <!-- MODAL: EDITAR/CREAR CATEGORÍA -->
+  <div class="modal-overlay" id="modal-cat">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title" id="modal-cat-title">NUEVA CATEGORÍA</span>
+        <button class="modal-close" id="modal-cat-close">×</button>
+      </div>
+      <div class="cat-editor">
+        <div>
+          <div class="cat-editor-label">NOMBRE</div>
+          <input class="cat-editor-input" id="cat-name-input" type="text" placeholder="Ej: Mascota" maxlength="14"/>
+        </div>
+        <div>
+          <div class="cat-editor-label">ÍCONO</div>
+          <div class="emoji-picker" id="emoji-picker"></div>
+          <input class="cat-editor-input" id="cat-emoji-custom" type="text" placeholder="O escribe un emoji..." maxlength="4" style="margin-top:6px;font-size:22px;text-align:center;"/>
+        </div>
+        <div>
+          <div class="cat-editor-label">COLOR</div>
+          <div class="color-picker" id="color-picker"></div>
+        </div>
+        <div class="essential-toggle" id="essential-toggle">
+          <span style="font-size:14px">💚</span>
+          <span class="essential-toggle-label">Contar como gasto esencial (mínimo vital)</span>
+          <div class="switch" id="essential-switch"></div>
+        </div>
+        <button class="add-btn" id="save-cat-btn">GUARDAR CATEGORÍA</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: QUIÉN SOY -->
+  <div class="modal-overlay" id="modal-me">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">¿QUIÉN SOY?</span>
+        <button class="modal-close" id="modal-me-close">×</button>
+      </div>
+      <div class="backup-hint" id="me-hint">Elegí quién está usando la app en este teléfono. Cada gasto queda anotado a nombre de quien lo carga.</div>
+      <div id="me-list"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: NUEVA PERSONA -->
+  <div class="modal-overlay" id="modal-person">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">NUEVA PERSONA</span>
+        <button class="modal-close" id="modal-person-close">×</button>
+      </div>
+      <div class="cat-editor">
+        <div>
+          <div class="cat-editor-label">NOMBRE</div>
+          <input class="cat-editor-input" id="person-name-input" type="text" placeholder="Ej: Javiera" maxlength="16"/>
+        </div>
+        <div>
+          <div class="cat-editor-label">COLOR</div>
+          <div class="color-picker" id="person-color-picker"></div>
+        </div>
+        <button class="add-btn" id="save-person-btn">GUARDAR PERSONA</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONFIRM DIALOG -->
+  <div class="confirm-overlay" id="confirm-overlay" style="display:none">
+    <div class="confirm-box">
+      <div class="confirm-title" id="confirm-title">¿Confirmar acción?</div>
+      <div class="confirm-msg" id="confirm-msg"></div>
+      <div class="confirm-btns">
+        <button class="confirm-btn cancel" id="confirm-cancel">Cancelar</button>
+        <button class="confirm-btn danger" id="confirm-ok">Eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════
+// GASTOS CASA — app de gastos compartidos del hogar.
+//
+// Toda la app vive en este archivo (HTML + CSS + JS inline), igual que
+// StockMerger. Cada módulo empieza con un banner `// XXX.JS — ...` para
+// poder saltar directo con Grep sin leer el archivo entero.
+//
+// Filosofía: LOCAL-FIRST. Todo se guarda en localStorage y funciona sin
+// internet. La nube (Supabase) es OPCIONAL: si está configurada, sincroniza
+// en tiempo real con la otra persona de la casa. Si no, la app anda igual.
+// ════════════════════════════════════════════════════════════════════
+
+
+// ════════════════════════════════════════════════════════════════════
+// CONST.JS — constantes y valores por defecto
+// ════════════════════════════════════════════════════════════════════
+const DEFAULT_CATEGORIES = [
+  {id:"comida",          label:"Comida",      emoji:"🍽️",  color:"#f59e0b", essential:true},
+  {id:"transporte",      label:"Transporte",  emoji:"🚌",  color:"#3b82f6", essential:true},
+  {id:"vivienda",        label:"Vivienda",    emoji:"🏠",  color:"#8b5cf6", essential:true},
+  {id:"salud",           label:"Salud",       emoji:"💊",  color:"#10b981", essential:true},
+  {id:"servicios",       label:"Servicios",   emoji:"💡",  color:"#f97316", essential:true},
+  {id:"entretenimiento", label:"Entret.",     emoji:"🎬",  color:"#ec4899", essential:false},
+  {id:"ropa",            label:"Ropa",        emoji:"👕",  color:"#06b6d4", essential:false},
+  {id:"otros",           label:"Otros",       emoji:"📦",  color:"#6b7280", essential:false},
+];
+
+// Personas de la casa. Se pueden editar en DATOS → Personas; con nube, las
+// que tienen usuario propio llegan desde la tabla casa_members.
+const DEFAULT_PEOPLE = [
+  {id:"julio",   name:"Julio",   color:"#f59e0b"},
+  {id:"javiera", name:"Javiera", color:"#ec4899"},
+];
+
+const KEYS = [["7","8","9"],["4","5","6"],["1","2","3"],["000","0","⌫"]];
+
+const EMOJI_OPTIONS = ["🍽️","🍕","🍔","🥗","☕","🍺","🛒","🚌","🚗","🏠","💊","💡","🎬","👕","📦","🐶","🐱","🎮","✈️","🏋️","💇","💅","📚","🎓","💼","🖥️","📱","🎵","🎨","🏖️","⛽","🔧","💒","👶","🎁","🌿","🏥","💳","🪴","🧹"];
+const COLOR_OPTIONS = ["#f59e0b","#f97316","#ef4444","#ec4899","#8b5cf6","#3b82f6","#06b6d4","#10b981","#84cc16","#6b7280","#a16207","#b45309","#be185d","#7c3aed","#1d4ed8","#0e7490","#065f46","#4d7c0f","#374151","#9f1239"];
+
+// Nube
+const SB_CFG_KEY   = "gastos_sb_config";   // { url, anonKey, ns }
+const SB_AUTH_KEY  = "gastos-auth";        // storageKey de la sesión de Supabase
+const SB_CURSOR_KEY= "gastos_sync_cursor"; // último synced_at traído de la nube
+const SB_SKIP_KEY  = "gastos_sb_skip";     // el usuario eligió "usar sin nube"
+const NS_DEFAULT   = "casa";
+
+// Cuánto tiempo se conservan las lápidas (registros borrados) antes de
+// purgarlas del todo. Tienen que sobrevivir lo suficiente para que el otro
+// teléfono, aunque esté apagado unos días, se entere del borrado.
+const TOMBSTONE_DAYS = 120;
+
+
+// ════════════════════════════════════════════════════════════════════
+// STORE.JS — persistencia local (localStorage)
+// ════════════════════════════════════════════════════════════════════
+function load(key, def) { try { const v = localStorage.getItem(key); return v === null ? def : (JSON.parse(v) ?? def); } catch { return def; } }
+function save(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { console.warn("save falló", key, e); } }
+
+
+// ════════════════════════════════════════════════════════════════════
+// STATE.JS — estado global
+// ════════════════════════════════════════════════════════════════════
+let CATEGORIES = load("gastos_categories", DEFAULT_CATEGORIES);
+let PEOPLE     = load("gastos_people", DEFAULT_PEOPLE);
+
+let expenses   = load("gastos_data", []);        // [{id,amount,category,note,tags,month,date,recurring,author,authorId,updatedAt,deleted,_dirty}]
+let recurring  = load("gastos_recurring", []);   // [{id,amount,category,note,updatedAt,deleted,_dirty}]
+let budgets    = load("gastos_budgets", {});     // {categoryId: amount}
+
+// Quién soy en ESTE teléfono. Con nube lo define la sesión; sin nube, se elige a mano.
+let meId       = load("gastos_me", null);        // id de PEOPLE
+
+// Config nube
+let sbConfig   = load(SB_CFG_KEY, null);
+let sbClient   = null;
+let sbSession  = null;
+let syncState  = "off";                          // off | ok | pending | error
+
+const getESSENTIAL = () => CATEGORIES.filter(c => c.essential).map(c => c.id);
+
+let currentView   = "home";
+let homeInput     = "", homeCat = null, homeRecurring = false, homePayer = null;
+let editingId     = null, editInput = "", editCat = null, editPayer = null;
+let editRecurId   = null, recurInput = "", recurCat = null;
+let histFilter    = "todas";
+let histTagFilter = null;
+let histPerson    = "todos";                     // "todos" | id de persona
+let confirmCallback = null;
+let homeTags = [];
+let editTags = [];
+
+const now = new Date();
+const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+
+
+// ════════════════════════════════════════════════════════════════════
+// UTILS.JS — helpers compartidos
+// ════════════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+
+// IDs únicos entre dispositivos: dos teléfonos cargando al mismo tiempo no
+// pueden chocar (Date.now() solo, sí podría).
+function uid() {
+  return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+}
+function nowISO() { return new Date().toISOString(); }
+
+const fmt     = n => "$" + Math.round(n).toLocaleString("es-CL");
+const catById = id => CATEGORIES.find(c => c.id === id) || {id, label:id||"Sin categoría", emoji:"📦", color:"#6b7280", essential:false};
+
+// Clave normalizada de persona: el cruce entre lo que carga cada app es POR
+// NOMBRE, así que hay que normalizar igual en los dos lados.
+function pkey(name) { return String(name||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+function personByName(name) {
+  const k = pkey(name);
+  return PEOPLE.find(p => pkey(p.name) === k) || null;
+}
+function personById(id) { return PEOPLE.find(p => p.id === id) || null; }
+function personColor(name) { const p = personByName(name); return p ? p.color : "#6b7280"; }
+function me() { return personById(meId); }
+function meName() { const p = me(); return p ? p.name : null; }
+
+// Vivos = sin lápida. TODAS las lecturas pasan por acá.
+const liveExpenses  = () => expenses.filter(e => !e.deleted);
+const liveRecurring = () => recurring.filter(r => !r.deleted);
+
+const monthlyEx = () => liveExpenses().filter(e => e.month === currentMonth);
+const totalMonth = () => monthlyEx().reduce((s,e) => s + e.amount, 0);
+const essTotal   = () => { const ess = getESSENTIAL(); return monthlyEx().filter(e => ess.includes(e.category)).reduce((s,e) => s + e.amount, 0); };
+
+function monthLabel(m) {
+  const [yr,mo] = m.split("-");
+  return new Date(yr, mo-1).toLocaleDateString("es-CL",{month:"short",year:"2-digit"}).toUpperCase();
+}
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// MUTATE.JS — toda escritura de datos pasa por acá
+// ────────────────────────────────────────────────────────────────────
+// Marca `updatedAt` + `_dirty` y dispara el push a la nube. Es la única
+// forma de que el otro teléfono se entere del cambio, así que NO hay que
+// tocar `expenses` / `recurring` directamente desde las vistas.
+// ════════════════════════════════════════════════════════════════════
+function touchExpense(exp) { exp.updatedAt = nowISO(); exp._dirty = true; return exp; }
+
+function persistExpenses()  { save("gastos_data", expenses); schedulePush(); }
+function persistRecurring() { save("gastos_recurring", recurring); schedulePush(); }
+function persistSettings()  { save("gastos_categories", CATEGORIES); save("gastos_budgets", budgets); save("gastos_people", PEOPLE); pushSettings(); }
+
+function addExpenseRecord(amount, category, note, isRecurring, tags = [], author = null) {
+  const who = author || meName();
+  const exp = {
+    id: uid(), amount, category, note, tags,
+    month: currentMonth, date: nowISO(), recurring: isRecurring,
+    author: who, authorId: (personByName(who) || {}).id || null,
+    updatedAt: nowISO(), deleted: false, _dirty: true
+  };
+  expenses = [exp, ...expenses];
+  persistExpenses();
+  return exp;
+}
+
+function deleteExpense(id) {
+  expenses = expenses.map(e => e.id === id ? touchExpense({...e, deleted:true}) : e);
+  persistExpenses();
+}
+function deleteRecurring(id) {
+  recurring = recurring.map(r => r.id === id ? {...r, deleted:true, updatedAt:nowISO(), _dirty:true} : r);
+  persistRecurring();
+}
+
+// Purga lápidas viejas (ya nadie las necesita para propagar el borrado).
+function purgeTombstones() {
+  const limit = Date.now() - TOMBSTONE_DAYS * 24 * 3600 * 1000;
+  const old = t => { const d = Date.parse(t || 0); return !isNaN(d) && d < limit; };
+  const before = expenses.length + recurring.length;
+  expenses  = expenses.filter(e  => !(e.deleted && !e._dirty && old(e.updatedAt)));
+  recurring = recurring.filter(r => !(r.deleted && !r._dirty && old(r.updatedAt)));
+  if (expenses.length + recurring.length !== before) {
+    save("gastos_data", expenses); save("gastos_recurring", recurring);
+  }
+}
+
+// Migración de datos viejos (v8 y anteriores): sin autor, sin updatedAt, id numérico.
+function migrateLegacy() {
+  let changed = false;
+  expenses = expenses.map(e => {
+    if (e.updatedAt && e.id !== undefined && e.deleted !== undefined) return e;
+    changed = true;
+    return {...e, id: String(e.id ?? uid()), updatedAt: e.updatedAt || e.date || nowISO(),
+            deleted: !!e.deleted, tags: e.tags || [], author: e.author ?? null, authorId: e.authorId ?? null};
+  });
+  recurring = recurring.map(r => {
+    if (r.updatedAt && r.deleted !== undefined) return r;
+    changed = true;
+    return {...r, id: String(r.id ?? uid()), updatedAt: r.updatedAt || nowISO(), deleted: !!r.deleted};
+  });
+  if (changed) { save("gastos_data", expenses); save("gastos_recurring", recurring); }
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// PEOPLE.JS — quién es quién y quién soy
+// ════════════════════════════════════════════════════════════════════
+function renderUserChip() {
+  const p = me();
+  $("user-name").textContent = p ? p.name.toUpperCase() : "¿QUIÉN SOY?";
+  $("user-dot").style.background = p ? p.color : "var(--text-dead)";
+  $("user-chip").style.borderColor = p ? p.color + "88" : "var(--border2)";
+  $("user-chip").style.color = p ? p.color : "var(--text-mute)";
+}
+
+// Selector "pagado por" del alta y de la edición.
+function buildPayerRow(containerId, getSel, onSel, locked) {
+  const el = $(containerId);
+  el.innerHTML = '<span class="payer-caption">PAGÓ</span>';
+  PEOPLE.forEach(p => {
+    const btn = document.createElement("button");
+    btn.className = "payer-btn" + (locked ? " locked" : "");
+    btn.textContent = p.name;
+    btn.dataset.id = p.id;
+    if (!locked) btn.addEventListener("click", () => { onSel(p.id); updatePayerRow(containerId, getSel); });
+    el.appendChild(btn);
+  });
+  updatePayerRow(containerId, getSel);
+}
+function updatePayerRow(containerId, getSel) {
+  $(containerId).querySelectorAll(".payer-btn").forEach(btn => {
+    const p = personById(btn.dataset.id);
+    const sel = getSel() === btn.dataset.id;
+    btn.style.borderColor = sel ? p.color : "var(--border)";
+    btn.style.color       = sel ? p.color : "var(--text-mute)";
+    btn.style.background  = sel ? p.color + "18" : "var(--bg3)";
+  });
+}
+
+// Modal "quién soy" (solo sin nube: con sesión iniciada la identidad la fija Supabase).
+function openMeModal() {
+  if (sbSession) {
+    showConfirm("Identidad fijada por la nube",
+      "Estás con la sesión de " + (meName() || "tu usuario") + ". Cada persona entra con su propio email, así que no se puede cambiar acá. Para cambiar de persona, cerrá sesión en DATOS → Nube.",
+      "Entendido", () => {});
+    return;
+  }
+  const list = $("me-list"); list.innerHTML = "";
+  PEOPLE.forEach(p => {
+    const row = document.createElement("div");
+    row.className = "person-row";
+    row.innerHTML = `
+      <span class="person-check">${p.id === meId ? "✓" : ""}</span>
+      <span class="who-avatar" style="background:${p.color}22;border-color:${p.color};color:${p.color}">${escapeHtml(p.name.slice(0,2).toUpperCase())}</span>
+      <span class="who-name" style="flex:1;color:${p.color}">${escapeHtml(p.name)}</span>`;
+    row.addEventListener("click", () => {
+      meId = p.id; save("gastos_me", meId);
+      homePayer = meId; updatePayerRow("payer-row-home", () => homePayer);
+      renderUserChip(); $("modal-me").classList.remove("open");
+    });
+    list.appendChild(row);
+  });
+  $("modal-me").classList.add("open");
+}
+$("user-chip").addEventListener("click", openMeModal);
+$("modal-me-close").addEventListener("click", () => $("modal-me").classList.remove("open"));
+$("modal-me").addEventListener("click", e => { if (e.target === $("modal-me")) $("modal-me").classList.remove("open"); });
+
+// Alta de persona (DATOS → Personas)
+let personColorSel = COLOR_OPTIONS[0];
+function renderPeopleList() {
+  const list = $("people-list"); list.innerHTML = "";
+  $("people-hint").innerHTML = sbSession
+    ? "Cada persona entra con su propio email. Los gastos quedan a nombre de quien los carga."
+    : "Sin nube, elegí en el ⬡ de arriba quién sos en este teléfono antes de cargar gastos.";
+  PEOPLE.forEach(p => {
+    const count = liveExpenses().filter(e => pkey(e.author) === pkey(p.name)).length;
+    const row = document.createElement("div");
+    row.className = "person-row";
+    row.innerHTML = `
+      <span class="who-avatar" style="background:${p.color}22;border-color:${p.color};color:${p.color}">${escapeHtml(p.name.slice(0,2).toUpperCase())}</span>
+      <div style="flex:1;min-width:0">
+        <div class="who-name" style="color:${p.color}">${escapeHtml(p.name)}${p.id === meId ? " · soy yo" : ""}</div>
+        <div class="cat-manager-meta">${count} gasto${count!==1?"s":""} registrado${count!==1?"s":""}</div>
+      </div>
+      <button class="icon-btn del-icon" title="Eliminar">×</button>`;
+    row.querySelector(".del-icon").addEventListener("click", () => {
+      if (PEOPLE.length <= 1) { showConfirm("No se puede", "Tiene que quedar al menos una persona.", "OK", () => {}); return; }
+      showConfirm("Eliminar persona",
+        `¿Sacar a ${p.name} de la lista? Los ${count} gasto(s) ya cargados a su nombre NO se borran, solo deja de aparecer para elegir.`,
+        "Eliminar", () => {
+          PEOPLE = PEOPLE.filter(x => x.id !== p.id);
+          if (meId === p.id) { meId = null; save("gastos_me", null); renderUserChip(); }
+          persistSettings(); renderPeopleList(); rebuildAllPayerRows();
+        });
+    });
+    list.appendChild(row);
+  });
+}
+$("add-person-btn").addEventListener("click", () => {
+  $("person-name-input").value = "";
+  personColorSel = COLOR_OPTIONS[Math.floor(Math.random()*COLOR_OPTIONS.length)];
+  buildPickerGrid("person-color-picker", COLOR_OPTIONS, () => personColorSel, c => { personColorSel = c; });
+  $("modal-person").classList.add("open");
+  $("person-name-input").focus();
+});
+$("modal-person-close").addEventListener("click", () => $("modal-person").classList.remove("open"));
+$("modal-person").addEventListener("click", e => { if (e.target === $("modal-person")) $("modal-person").classList.remove("open"); });
+$("save-person-btn").addEventListener("click", () => {
+  const name = $("person-name-input").value.trim();
+  if (!name) { $("person-name-input").focus(); return; }
+  if (personByName(name)) { showConfirm("Ya existe", `Ya hay alguien llamado "${name}".`, "OK", () => {}); return; }
+  PEOPLE.push({id: "p_" + uid(), name, color: personColorSel});
+  persistSettings();
+  $("modal-person").classList.remove("open");
+  renderPeopleList(); rebuildAllPayerRows();
+});
+
+function rebuildAllPayerRows() {
+  buildPayerRow("payer-row-home", () => homePayer, id => { homePayer = id; }, !!sbSession);
+  buildPayerRow("payer-row-edit", () => editPayer, id => { editPayer = id; }, false);
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// UI.JS — piezas compartidas: confirm, navegación, display, keypad, grids
+// ════════════════════════════════════════════════════════════════════
+function showConfirm(title, msg, okLabel, cb, danger = true) {
+  $("confirm-title").textContent = title;
+  $("confirm-msg").textContent = msg;
+  const ok = $("confirm-ok");
+  ok.textContent = okLabel || "Eliminar";
+  ok.style.background = danger ? "var(--red)" : "var(--green)";
+  confirmCallback = cb;
+  $("confirm-overlay").style.display = "flex";
+}
+$("confirm-cancel").addEventListener("click", () => { $("confirm-overlay").style.display = "none"; });
+$("confirm-ok").addEventListener("click", () => {
+  $("confirm-overlay").style.display = "none";
+  const cb = confirmCallback; confirmCallback = null;
+  if (cb) cb();
+});
+
+$("month-badge").textContent = now.toLocaleDateString("es-CL",{month:"long",year:"numeric"}).toUpperCase();
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  $("view-" + view).classList.add("active");
+  renderCurrentView();
+}
+function renderCurrentView() {
+  if (currentView === "historial")   renderHistorial();
+  if (currentView === "resumen")     renderResumen();
+  if (currentView === "recurrentes") renderRecurrentes();
+  if (currentView === "presupuesto") renderPresupuesto();
+  if (currentView === "categorias")  renderCatManager();
+  if (currentView === "datos")     { renderPeopleList(); sbRefreshUI(); }
+}
+document.querySelectorAll(".nav-btn").forEach(btn => {
+  btn.addEventListener("click", () => switchView(btn.dataset.view));
+});
+
+function updateDisplay(suffix, val) {
+  const digits  = $("digits-"+suffix);
+  const cursor  = $("cursor-"+suffix);
+  const preview = $("preview-"+suffix);
+  if (val) {
+    digits.textContent = val; digits.classList.remove("empty");
+    cursor.style.display = "inline";
+    const n = parseFloat(val);
+    if (n > 0) { preview.style.display = "block"; preview.textContent = "= " + fmt(n); }
+    else preview.style.display = "none";
+  } else {
+    digits.textContent = "0"; digits.classList.add("empty");
+    cursor.style.display = "none"; preview.style.display = "none";
+  }
+}
+
+function buildCatGrid(containerId, getSelected, onSelect) {
+  const el = $(containerId);
+  el.innerHTML = "";
+  CATEGORIES.forEach(cat => {
+    const btn = document.createElement("button");
+    btn.className = "cat-btn"; btn.dataset.id = cat.id;
+    btn.innerHTML = `<span class="cat-emoji">${cat.emoji}</span><span class="cat-label">${escapeHtml(cat.label)}</span>`;
+    btn.addEventListener("click", () => {
+      onSelect(cat.id); updateCatGrid(containerId, getSelected);
+      btn.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
+    });
+    el.appendChild(btn);
+  });
+  updateCatGrid(containerId, getSelected);
+}
+function updateCatGrid(containerId, getSelected) {
+  $(containerId).querySelectorAll(".cat-btn").forEach(btn => {
+    const cat = catById(btn.dataset.id); const sel = getSelected() === btn.dataset.id;
+    btn.style.borderColor = sel ? cat.color : "var(--border)";
+    btn.style.background  = sel ? cat.color+"18" : "var(--bg3)";
+    btn.style.boxShadow   = sel ? `0 0 12px ${cat.color}44` : "none";
+    btn.querySelector(".cat-label").style.color = sel ? cat.color : "var(--text-mute)";
+  });
+}
+
+function buildKeypad(containerId, onKey) {
+  const el = $(containerId); el.innerHTML = "";
+  KEYS.forEach(row => {
+    const rowEl = document.createElement("div"); rowEl.className = "key-row";
+    row.forEach(k => {
+      const btn = document.createElement("button");
+      btn.className = "key" + (k === "⌫" ? " del" : ""); btn.textContent = k;
+      btn.addEventListener("click", () => onKey(k));
+      rowEl.appendChild(btn);
+    });
+    el.appendChild(rowEl);
+  });
+}
+function processKey(k, getVal, setVal) {
+  let v = getVal();
+  if (k === "⌫") v = v.slice(0,-1);
+  else if (k === "000") v = v ? v + "000" : v;
+  else if (k === ".") { if (!v.includes(".")) v = v + "."; }
+  else { if (v.length < 10) v = v + k; }
+  setVal(v);
+}
+
+// Grilla genérica de colores (categorías y personas comparten el mismo picker).
+function buildPickerGrid(containerId, options, getSel, onSel) {
+  const el = $(containerId); el.innerHTML = "";
+  options.forEach(col => {
+    const opt = document.createElement("div");
+    opt.className = "color-opt" + (col === getSel() ? " selected" : "");
+    opt.style.background = col;
+    opt.addEventListener("click", () => {
+      onSel(col);
+      el.querySelectorAll(".color-opt").forEach(o => o.classList.remove("selected"));
+      opt.classList.add("selected");
+    });
+    el.appendChild(opt);
+  });
+}
+
+function updateStrip() { $("strip-total").textContent = fmt(totalMonth()); }
+
+// Punto de estado de sincronización (arriba, al lado del mes).
+function setSync(st) {
+  syncState = st;
+  const dot = $("sync-dot");
+  dot.className = "sync-dot " + st;
+  dot.title = {off:"Sin nube · solo este teléfono", ok:"Sincronizado", pending:"Sincronizando…", error:"Error de sincronización"}[st] || "";
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// TAGS.JS — etiquetas libres por gasto
+// ════════════════════════════════════════════════════════════════════
+function normalizeTag(t) { return t.trim().toLowerCase().replace(/\s+/g,"-").slice(0,20); }
+
+function buildTagUI(pillsId, inputId, addBtnId, getTagsArr, setTagsArr) {
+  function refresh() {
+    const pills = $(pillsId);
+    pills.innerHTML = "";
+    getTagsArr().forEach((t,i) => {
+      const pill = document.createElement("span");
+      pill.className = "tag-pill";
+      pill.innerHTML = `#${escapeHtml(t)} <button class="tag-pill-x">×</button>`;
+      pill.querySelector(".tag-pill-x").addEventListener("click", () => {
+        setTagsArr(getTagsArr().filter((_,j) => j !== i)); refresh();
+      });
+      pills.appendChild(pill);
+    });
+  }
+  function addTag() {
+    const inp = $(inputId);
+    const raw = normalizeTag(inp.value);
+    if (!raw) return;
+    const arr = getTagsArr();
+    if (!arr.includes(raw) && arr.length < 5) setTagsArr([...arr, raw]);
+    inp.value = ""; refresh();
+  }
+  $(addBtnId).addEventListener("click", addTag);
+  $(inputId).addEventListener("keydown", e => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(); } });
+  refresh();
+  return refresh;
+}
+
+const refreshHomeTags = buildTagUI("tag-pills-home","tag-input-home","tag-add-home", () => homeTags, arr => { homeTags = arr; });
+const refreshEditTags = buildTagUI("tag-pills-edit","tag-input-edit","tag-add-edit", () => editTags, arr => { editTags = arr; });
+
+function allTags() {
+  const set = new Set();
+  liveExpenses().forEach(e => (e.tags||[]).forEach(t => set.add(t)));
+  return [...set].sort();
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// HOME.JS — pantalla de alta de gastos
+// ════════════════════════════════════════════════════════════════════
+buildCatGrid("cat-grid-home", () => homeCat, id => { homeCat = id; updateAddBtn(); });
+buildKeypad("keypad-home", k => {
+  processKey(k, () => homeInput, v => { homeInput = v; updateDisplay("home", homeInput); updateAddBtn(); });
+});
+
+$("recur-toggle-btn").addEventListener("click", () => {
+  homeRecurring = !homeRecurring;
+  $("recur-switch").classList.toggle("on", homeRecurring);
+  updateAddBtn();
+});
+
+function updateAddBtn() {
+  const ok = homeInput && parseFloat(homeInput) > 0 && homeCat && homePayer;
+  const btn = $("add-btn");
+  btn.disabled = !ok;
+  btn.className = "add-btn" + (homeRecurring ? " purple" : "");
+  btn.textContent = !homePayer ? "ELEGÍ QUIÉN PAGÓ"
+                  : homeRecurring ? "GUARDAR COMO GASTO FIJO"
+                  : "REGISTRAR GASTO";
+}
+
+$("add-btn").addEventListener("click", () => {
+  const amount = parseFloat(homeInput);
+  const payer = personById(homePayer);
+  if (!amount || !homeCat || !payer) return;
+  const note = $("note-home").value.trim();
+  const tags = [...homeTags];
+
+  if (homeRecurring) {
+    recurring = [{id:uid(), amount, category:homeCat, note, updatedAt:nowISO(), deleted:false, _dirty:true}, ...recurring];
+    persistRecurring();
+  }
+  addExpenseRecord(amount, homeCat, note, homeRecurring, tags, payer.name);
+
+  const content = $("view-home");
+  content.style.animation = "none"; void content.offsetHeight;
+  content.style.animation = "flashGreen .6s ease";
+
+  const la = $("last-added");
+  const cat = catById(homeCat);
+  la.textContent = `✓ ${fmt(amount)} en ${cat.label} · ${payer.name}${homeRecurring ? " · guardado como fijo" : ""}`;
+  la.style.display = "block";
+
+  homeInput = ""; homeCat = null; homeRecurring = false; homeTags = [];
+  $("note-home").value = "";
+  refreshHomeTags();
+  $("recur-switch").classList.remove("on");
+  updateDisplay("home",""); updateCatGrid("cat-grid-home", () => homeCat);
+  updateAddBtn(); updateStrip();
+});
+
+
+// ════════════════════════════════════════════════════════════════════
+// HISTORIAL.JS — lista de gastos del mes, con filtros
+// ════════════════════════════════════════════════════════════════════
+function renderHistorial() {
+  const mex = monthlyEx();
+  $("hist-title").textContent = `ESTE MES · ${fmt(totalMonth())}`;
+
+  // Filtro por persona
+  const pr = $("person-filter-row"); pr.innerHTML = "";
+  const peopleFilters = [{id:"todos", label:"👥 Todos", color:"var(--gold)"},
+                         ...PEOPLE.map(p => ({id:p.id, label:p.name, color:p.color}))];
+  peopleFilters.forEach(f => {
+    const chip = document.createElement("div");
+    chip.className = "filter-chip" + (histPerson === f.id ? " active" : "");
+    chip.textContent = f.label;
+    if (histPerson === f.id) { chip.style.borderColor = f.color; chip.style.color = f.color; chip.style.background = f.color + "12"; }
+    chip.addEventListener("click", () => { histPerson = f.id; renderHistorial(); });
+    pr.appendChild(chip);
+  });
+
+  // Filtro por categoría + etiquetas
+  const fr = $("filter-row"); fr.innerHTML = "";
+  [{id:"todas",label:"Todas"}, ...CATEGORIES.map(c => ({id:c.id, label:c.emoji+" "+c.label}))].forEach(f => {
+    const chip = document.createElement("div");
+    chip.className = "filter-chip" + (histFilter === f.id && !histTagFilter ? " active" : "");
+    chip.textContent = f.label;
+    chip.addEventListener("click", () => { histFilter = f.id; histTagFilter = null; renderHistorial(); });
+    fr.appendChild(chip);
+  });
+  const tags = allTags();
+  if (tags.length) {
+    const sep = document.createElement("div");
+    sep.style.cssText = "width:1px;background:var(--border);flex-shrink:0;margin:0 2px";
+    fr.appendChild(sep);
+    tags.forEach(t => {
+      const chip = document.createElement("div");
+      chip.className = "filter-chip" + (histTagFilter === t ? " active-tag" : "");
+      chip.textContent = "#" + t;
+      chip.addEventListener("click", () => { histTagFilter = histTagFilter === t ? null : t; renderHistorial(); });
+      fr.appendChild(chip);
+    });
+  }
+
+  let filtered = histFilter === "todas" ? mex : mex.filter(e => e.category === histFilter);
+  if (histTagFilter) filtered = filtered.filter(e => (e.tags||[]).includes(histTagFilter));
+  if (histPerson !== "todos") {
+    const p = personById(histPerson);
+    if (p) filtered = filtered.filter(e => pkey(e.author) === pkey(p.name));
+  }
+  filtered = [...filtered].sort((a,b) => String(b.date).localeCompare(String(a.date)));
+
+  const list = $("expense-list");
+  list.innerHTML = "";
+  if (filtered.length === 0) { list.innerHTML = '<div class="empty">Sin gastos con este filtro</div>'; return; }
+
+  filtered.forEach(e => {
+    const cat = catById(e.category);
+    const pcol = personColor(e.author);
+    const row = document.createElement("div");
+    row.className = "expense-row"; row.dataset.id = e.id;
+    const date = new Date(e.date).toLocaleDateString("es-CL",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+    row.innerHTML = `
+      <div class="expense-dot" style="background:${cat.color}"></div>
+      <div class="expense-info">
+        <div class="expense-cat">
+          ${cat.emoji} ${escapeHtml(cat.label)}
+          ${e.author ? `<span class="person-badge" style="color:${pcol};border-color:${pcol}66;background:${pcol}14">${escapeHtml(e.author)}</span>` : ""}
+          ${e.recurring ? '<span class="recur-badge">FIJO</span>' : ""}
+        </div>
+        ${e.note ? `<div class="expense-note">${escapeHtml(e.note)}</div>` : ""}
+        ${(e.tags && e.tags.length) ? `<div class="expense-tags">${e.tags.map(t => `<span class="expense-tag" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</span>`).join("")}</div>` : ""}
+        <div class="expense-date">${date}</div>
+      </div>
+      <div class="expense-right">
+        <div class="expense-amount" style="color:${cat.color}">${fmt(e.amount)}</div>
+        <div class="action-btns">
+          <button class="icon-btn edit-icon" title="Editar">✏️</button>
+          <button class="icon-btn del-icon" title="Eliminar">×</button>
+        </div>
+      </div>
+      <div class="swipe-delete">ELIMINAR</div>`;
+
+    row.querySelectorAll(".expense-tag").forEach(el => {
+      el.addEventListener("click", () => { histTagFilter = el.dataset.tag; renderHistorial(); });
+    });
+    row.querySelector(".edit-icon").addEventListener("click", () => openEditModal(e));
+
+    const askDelete = () => showConfirm(
+      "Eliminar gasto",
+      `¿Eliminar ${fmt(e.amount)} en ${cat.label}?${e.note ? " (" + e.note + ")" : ""}`,
+      "Eliminar",
+      () => { deleteExpense(e.id); renderHistorial(); updateStrip(); }
+    );
+    row.querySelector(".del-icon").addEventListener("click", askDelete);
+
+    // Swipe to delete (touch)
+    let startX = 0, dx = 0;
+    row.addEventListener("touchstart", ev => { startX = ev.touches[0].clientX; }, {passive:true});
+    row.addEventListener("touchmove", ev => {
+      dx = ev.touches[0].clientX - startX;
+      if (dx < 0) { row.style.transform = `translateX(${Math.max(dx,-90)}px)`; row.classList.add("swiping"); }
+    }, {passive:true});
+    row.addEventListener("touchend", () => {
+      row.style.transform = ""; row.classList.remove("swiping");
+      if (dx < -70) askDelete();
+      dx = 0;
+    });
+
+    list.appendChild(row);
+  });
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// EDIT.JS — modal de edición de un gasto
+// ════════════════════════════════════════════════════════════════════
+buildCatGrid("cat-grid-edit", () => editCat, id => { editCat = id; updateSaveEditBtn(); });
+buildKeypad("keypad-edit", k => {
+  processKey(k, () => editInput, v => { editInput = v; updateDisplay("edit", editInput); updateSaveEditBtn(); });
+});
+function updateSaveEditBtn() {
+  $("save-edit-btn").disabled = !(editInput && parseFloat(editInput) > 0 && editCat);
+}
+function openEditModal(e) {
+  editingId = e.id; editInput = String(e.amount); editCat = e.category;
+  editTags = [...(e.tags||[])];
+  const p = personByName(e.author);
+  editPayer = p ? p.id : null;
+  $("note-edit").value = e.note || "";
+  refreshEditTags();
+  updateDisplay("edit", editInput);
+  updateCatGrid("cat-grid-edit", () => editCat);
+  updatePayerRow("payer-row-edit", () => editPayer);
+  updateSaveEditBtn();
+  $("modal-edit").classList.add("open");
+}
+function closeEditModal() { $("modal-edit").classList.remove("open"); editingId = null; }
+$("modal-edit-close").addEventListener("click", closeEditModal);
+$("modal-edit").addEventListener("click", e => { if (e.target === $("modal-edit")) closeEditModal(); });
+$("save-edit-btn").addEventListener("click", () => {
+  const amount = parseFloat(editInput); if (!amount || !editCat) return;
+  const note = $("note-edit").value.trim();
+  const payer = personById(editPayer);
+  expenses = expenses.map(e => e.id === editingId
+    ? touchExpense({...e, amount, category:editCat, note, tags:[...editTags],
+                    author: payer ? payer.name : e.author, authorId: payer ? payer.id : e.authorId})
+    : e);
+  persistExpenses(); closeEditModal(); renderHistorial(); updateStrip();
+  if (currentView === "resumen") renderResumen();
+});
+
+
+// ════════════════════════════════════════════════════════════════════
+// DONUT.JS — dona de distribución por categoría (SVG a mano, sin librerías)
+// ════════════════════════════════════════════════════════════════════
+function renderDonut(list, total) {
+  const container = $("donut-content");
+  container.innerHTML = "";
+
+  const byCat = CATEGORIES.map(cat => ({
+    ...cat, total: list.filter(e => e.category === cat.id).reduce((s,e) => s+e.amount, 0)
+  })).filter(c => c.total > 0).sort((a,b) => b.total - a.total);
+
+  if (byCat.length === 0 || total <= 0) {
+    container.innerHTML = '<div class="donut-empty">Sin gastos este mes</div>';
+    return;
+  }
+
+  const SIZE = 140, R = 52, HOLE = 32, CX = SIZE/2, CY = SIZE/2, TAU = Math.PI*2;
+  const polarToXY = (angle, r) => [CX + r*Math.cos(angle - Math.PI/2), CY + r*Math.sin(angle - Math.PI/2)];
+  function slicePath(startAngle, endAngle, r, hole) {
+    const large = endAngle - startAngle > Math.PI ? 1 : 0;
+    const [x1,y1] = polarToXY(startAngle, r);
+    const [x2,y2] = polarToXY(endAngle, r);
+    const [x3,y3] = polarToXY(endAngle, hole);
+    const [x4,y4] = polarToXY(startAngle, hole);
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${hole} ${hole} 0 ${large} 0 ${x4} ${y4} Z`;
+  }
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("width", SIZE); svg.setAttribute("height", SIZE);
+  svg.setAttribute("viewBox", `0 0 ${SIZE} ${SIZE}`);
+  svg.style.overflow = "visible";
+
+  let highlighted = null;
+  const segments = [], legendItems = [];
+
+  let angle = 0;
+  byCat.forEach((cat) => {
+    const slice = (cat.total/total) * TAU;
+    const gapA = byCat.length > 1 ? 0.015 : 0;
+    const path = document.createElementNS("http://www.w3.org/2000/svg","path");
+    path.setAttribute("d", slicePath(angle + gapA, angle + slice - gapA, R, HOLE));
+    path.setAttribute("fill", cat.color);
+    path.classList.add("donut-segment");
+    svg.appendChild(path);
+    segments.push(path);
+    angle += slice;
+  });
+
+  const centerDiv = document.createElement("div");
+  centerDiv.className = "donut-center";
+  centerDiv.innerHTML = `<span class="donut-center-label">TOTAL</span><span class="donut-center-amount" id="donut-c-amt">${fmt(total)}</span>`;
+
+  const svgWrap = document.createElement("div");
+  svgWrap.className = "donut-svg-wrap";
+  svgWrap.style.width = SIZE+"px"; svgWrap.style.height = SIZE+"px";
+  svgWrap.appendChild(svg); svgWrap.appendChild(centerDiv);
+
+  const legend = document.createElement("div");
+  legend.className = "donut-legend";
+  byCat.forEach(cat => {
+    const pct = Math.round((cat.total/total) * 100);
+    const item = document.createElement("div");
+    item.className = "donut-legend-item";
+    item.innerHTML = `
+      <div class="donut-legend-dot" style="background:${cat.color}"></div>
+      <span class="donut-legend-label">${cat.emoji} ${escapeHtml(cat.label)}</span>
+      <span class="donut-legend-pct" style="color:${cat.color}">${pct}%</span>`;
+    legend.appendChild(item);
+    legendItems.push(item);
+  });
+
+  function highlight(i) {
+    if (highlighted === i) {
+      highlighted = null;
+      segments.forEach(s => { s.style.opacity = "1"; s.style.transform = "scale(1)"; });
+      legendItems.forEach(l => l.classList.remove("dimmed"));
+      centerDiv.querySelector(".donut-center-amount").textContent = fmt(total);
+      centerDiv.querySelector(".donut-center-label").textContent = "TOTAL";
+    } else {
+      highlighted = i;
+      const cat = byCat[i];
+      segments.forEach((s,j) => {
+        s.style.opacity = j === i ? "1" : "0.25";
+        s.style.transform = j === i ? "scale(1.04)" : "scale(1)";
+      });
+      legendItems.forEach((l,j) => l.classList.toggle("dimmed", j !== i));
+      centerDiv.querySelector(".donut-center-amount").textContent = fmt(cat.total);
+      centerDiv.querySelector(".donut-center-label").textContent = cat.label.toUpperCase();
+    }
+  }
+  segments.forEach((s,i) => s.addEventListener("click", () => highlight(i)));
+  legendItems.forEach((item,i) => item.addEventListener("click", () => highlight(i)));
+
+  const body = document.createElement("div");
+  body.className = "donut-body";
+  body.appendChild(svgWrap); body.appendChild(legend);
+  container.appendChild(body);
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// WHO.JS — cuánto puso cada persona y cómo queda la cuenta entre ambos
+// ════════════════════════════════════════════════════════════════════
+function renderWho(mex, total) {
+  const list = $("who-list"); list.innerHTML = "";
+  const bal = $("who-balance");
+
+  // Agrupa por autor (por nombre normalizado, así aguanta personas borradas
+  // de la lista pero con gastos viejos a su nombre).
+  const groups = new Map();
+  mex.forEach(e => {
+    const k = pkey(e.author) || "_sin";
+    if (!groups.has(k)) groups.set(k, {name: e.author || "Sin asignar", total: 0, count: 0, color: personColor(e.author)});
+    const g = groups.get(k); g.total += e.amount; g.count++;
+  });
+  // Las personas de la casa aparecen siempre, aunque no hayan gastado.
+  PEOPLE.forEach(p => {
+    const k = pkey(p.name);
+    if (!groups.has(k)) groups.set(k, {name: p.name, total: 0, count: 0, color: p.color});
+  });
+
+  const rows = [...groups.values()].sort((a,b) => b.total - a.total);
+  if (rows.length === 0 || total <= 0) {
+    list.innerHTML = '<div style="font-size:10px;color:var(--text-mute);text-align:center;padding:8px 0">Sin gastos este mes.</div>';
+    bal.innerHTML = "";
+    return;
+  }
+
+  rows.forEach(g => {
+    const pct = total > 0 ? Math.round((g.total/total)*100) : 0;
+    const row = document.createElement("div");
+    row.className = "who-row";
+    row.innerHTML = `
+      <div class="who-avatar" style="background:${g.color}22;border-color:${g.color};color:${g.color}">${escapeHtml(g.name.slice(0,2).toUpperCase())}</div>
+      <div class="who-info">
+        <div class="who-name" style="color:${g.color}">${escapeHtml(g.name)}</div>
+        <div class="who-track"><div class="who-fill" style="width:${pct}%;background:${g.color}"></div></div>
+      </div>
+      <div class="who-right">
+        <div class="who-total" style="color:${g.color}">${fmt(g.total)}</div>
+        <div class="who-pct">${pct}% · ${g.count} gasto${g.count!==1?"s":""}</div>
+      </div>`;
+    list.appendChild(row);
+  });
+
+  // Balance: si fueran a partir todo a la mitad, quién le debe a quién.
+  const conGasto = rows.filter(r => r.total > 0 || PEOPLE.some(p => pkey(p.name) === pkey(r.name)));
+  if (conGasto.length === 2) {
+    const [a,b] = conGasto;
+    const mitad = total / 2;
+    const diff = Math.abs(a.total - mitad);
+    if (Math.round(diff) <= 0) {
+      bal.innerHTML = `Van parejos: cada uno puso <strong>${fmt(mitad)}</strong>.`;
+    } else {
+      const deudor = a.total < b.total ? a : b;
+      const acreedor = a.total < b.total ? b : a;
+      bal.innerHTML = `Si parten todo a la mitad (<strong>${fmt(mitad)}</strong> cada uno), ` +
+                      `<strong>${escapeHtml(deudor.name)}</strong> le debe <strong>${fmt(diff)}</strong> a ${escapeHtml(acreedor.name)}.`;
+    }
+  } else {
+    bal.innerHTML = "";
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// RESUMEN.JS — números del mes, evolución y análisis
+// ════════════════════════════════════════════════════════════════════
+function renderResumen() {
+  const mex = monthlyEx();
+  const total = totalMonth();
+  const all = liveExpenses();
+  $("vital-amount").textContent = fmt(essTotal());
+  $("resumen-total").textContent = fmt(total);
+
+  renderDonut(mex, total);
+  renderWho(mex, total);
+
+  const tagsEl = $("vital-tags"); tagsEl.innerHTML = "";
+  CATEGORIES.filter(c => c.essential).forEach(c => {
+    const t = document.createElement("span"); t.className = "vital-tag";
+    t.style.color = c.color; t.style.borderColor = c.color; t.textContent = c.label;
+    tagsEl.appendChild(t);
+  });
+
+  const months = [...new Set(all.map(e => e.month))].sort();
+  const monthTotals = months.map(m => all.filter(e => e.month === m).reduce((s,e) => s+e.amount, 0));
+  const avg = monthTotals.length ? monthTotals.reduce((a,b) => a+b, 0)/monthTotals.length : 0;
+  $("avg-monthly").textContent = fmt(avg);
+  $("avg-months-label").textContent = `últimos ${monthTotals.length} ${monthTotals.length === 1 ? "mes" : "meses"}`;
+
+  const dayMap = {};
+  mex.forEach(e => { const d = String(e.date).slice(0,10); dayMap[d] = (dayMap[d]||0) + e.amount; });
+  const days = Object.entries(dayMap).sort((a,b) => b[1]-a[1]);
+  if (days.length) {
+    const [dayStr, dayAmt] = days[0];
+    $("most-expensive-day").textContent = new Date(dayStr+"T12:00:00").toLocaleDateString("es-CL",{day:"numeric",month:"short"});
+    $("most-expensive-day-amount").textContent = fmt(dayAmt);
+  } else {
+    $("most-expensive-day").textContent = "—";
+    $("most-expensive-day-amount").textContent = "";
+  }
+
+  // Evolución de los últimos 6 meses
+  const last6 = months.slice(-6);
+  const trendEl = $("trend-chart");
+  if (last6.length > 1) {
+    trendEl.style.display = "block";
+    const barsEl = $("trend-bars"); barsEl.innerHTML = "";
+    const vals = last6.map(m => all.filter(e => e.month === m).reduce((s,e) => s+e.amount, 0));
+    const maxVal = Math.max(...vals) || 1;
+    last6.forEach((m,i) => {
+      const wrap = document.createElement("div"); wrap.className = "trend-bar-wrap";
+      const isCurrentM = m === currentMonth;
+      const pct = Math.round((vals[i]/maxVal)*100);
+      wrap.innerHTML = `
+        <div class="trend-val">${vals[i] > 0 ? fmt(vals[i]).replace("$","") : ""}</div>
+        <div class="trend-bar" style="height:${pct}%;background:${isCurrentM ? "var(--gold)" : "var(--trend-inactive)"};min-height:3px"></div>
+        <div class="trend-mo" style="color:${isCurrentM ? "var(--gold)" : "var(--text-mute)"}">${monthLabel(m)}</div>`;
+      barsEl.appendChild(wrap);
+    });
+  } else trendEl.style.display = "none";
+
+  // Día de la semana más caro
+  const DAYS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+  const dowTotals = [0,0,0,0,0,0,0];
+  mex.forEach(e => { dowTotals[new Date(e.date).getDay()] += e.amount; });
+  const maxDow = Math.max(...dowTotals) || 1;
+  const peakDow = dowTotals.indexOf(Math.max(...dowTotals));
+  const wdEl = $("weekday-bars"); wdEl.innerHTML = "";
+  const dowColors = ["#3b82f6","#10b981","#10b981","#10b981","#10b981","#f59e0b","#3b82f6"];
+  dowTotals.forEach((val,i) => {
+    const pct = Math.round((val/maxDow)*100);
+    const isPeak = i === peakDow && val > 0;
+    const wrap = document.createElement("div"); wrap.className = "weekday-wrap";
+    wrap.innerHTML = `
+      <div class="weekday-bar" style="height:${pct}%;background:${isPeak ? "var(--gold)" : dowColors[i]};opacity:${val > 0 ? 1 : .15};min-height:3px"></div>
+      <div class="weekday-label${isPeak ? " peak" : ""}">${DAYS[i]}</div>`;
+    wdEl.appendChild(wrap);
+  });
+  $("analysis-weekday").style.display = mex.length ? "block" : "none";
+
+  // Gastos hormiga (muchas transacciones chicas en la misma categoría)
+  const hormigas = CATEGORIES.map(cat => {
+    const catEx = mex.filter(e => e.category === cat.id);
+    const small = catEx.filter(e => e.amount < 5000);
+    return {...cat, count: small.length, total: small.reduce((s,e) => s+e.amount, 0), allCount: catEx.length};
+  }).filter(c => c.count >= 3).sort((a,b) => b.count - a.count);
+  const hormiEl = $("hormiga-list"); hormiEl.innerHTML = "";
+  if (hormigas.length === 0) {
+    hormiEl.innerHTML = '<div style="font-size:10px;color:var(--text-mute);text-align:center;padding:8px 0">Sin gastos hormiga detectados este mes ✓</div>';
+  } else {
+    hormigas.slice(0,5).forEach(cat => {
+      const div = document.createElement("div"); div.className = "hormiga-row";
+      div.innerHTML = `
+        <span style="font-size:18px">${cat.emoji}</span>
+        <div class="hormiga-info">
+          <div class="hormiga-label" style="color:${cat.color}">${escapeHtml(cat.label)}</div>
+          <div class="hormiga-sub">${cat.count} transacciones chicas (&lt; $5.000)</div>
+        </div>
+        <div class="hormiga-right">
+          <div class="hormiga-total" style="color:${cat.color}">${fmt(cat.total)}</div>
+          <div class="hormiga-count">${cat.count} de ${cat.allCount} gastos</div>
+        </div>`;
+      hormiEl.appendChild(div);
+    });
+  }
+  $("analysis-hormiga").style.display = mex.length ? "block" : "none";
+
+  // Comparativa contra el mes anterior
+  const currIdx = months.indexOf(currentMonth);
+  const compEl = $("analysis-comp");
+  if (currIdx > 0) {
+    compEl.style.display = "block";
+    const prevMonth = months[currIdx-1];
+    $("comp-prev-label").textContent = monthLabel(prevMonth);
+    const prevEx = all.filter(e => e.month === prevMonth);
+    const compList = $("comp-list"); compList.innerHTML = "";
+
+    CATEGORIES.filter(cat => mex.some(e => e.category === cat.id) || prevEx.some(e => e.category === cat.id)).forEach(cat => {
+      const curr = mex.filter(e => e.category === cat.id).reduce((s,e) => s+e.amount, 0);
+      const prev = prevEx.filter(e => e.category === cat.id).reduce((s,e) => s+e.amount, 0);
+      const delta = curr - prev;
+      const pctDelta = prev > 0 ? Math.round((delta/prev)*100) : null;
+      const row = document.createElement("div"); row.className = "comp-row";
+      const deltaClass = delta > 0 ? "up" : delta < 0 ? "down" : "same";
+      const pctStr = pctDelta !== null ? (delta > 0 ? "↑" : "↓") + Math.abs(pctDelta) + "%" : "nuevo";
+      row.innerHTML = `
+        <span class="comp-emoji">${cat.emoji}</span>
+        <span class="comp-label" style="color:${cat.color}">${escapeHtml(cat.label)}</span>
+        <span class="comp-prev">${prev > 0 ? fmt(prev) : "—"}</span>
+        <span class="comp-curr" style="color:${curr > 0 ? cat.color : "var(--text-mute)"}">${curr > 0 ? fmt(curr) : "—"}</span>
+        <span class="comp-delta ${deltaClass}">${curr > 0 && prev > 0 ? pctStr : curr > 0 ? "nuevo" : prev > 0 ? "sin gasto" : "—"}</span>`;
+      compList.appendChild(row);
+    });
+
+    const prevTotal = prevEx.reduce((s,e) => s+e.amount, 0);
+    const totalDelta = total - prevTotal;
+    $("comp-total-prev").textContent = fmt(prevTotal);
+    $("comp-total-curr").textContent = fmt(total);
+    const ctd = $("comp-total-delta");
+    ctd.textContent = (totalDelta > 0 ? "+" : "") + fmt(totalDelta);
+    ctd.className = "comp-delta " + (totalDelta > 0 ? "up" : totalDelta < 0 ? "down" : "same");
+  } else compEl.style.display = "none";
+
+  // Barras por categoría, con límite si está definido
+  const barsEl = $("cat-bars"); barsEl.innerHTML = "";
+  const byCat = CATEGORIES.map(cat => ({
+    ...cat, total: mex.filter(e => e.category === cat.id).reduce((s,e) => s+e.amount, 0)
+  })).filter(c => c.total > 0).sort((a,b) => b.total - a.total);
+
+  if (byCat.length === 0) barsEl.innerHTML = '<div class="empty">Sin datos aún</div>';
+  else byCat.forEach(cat => {
+    const pct = total > 0 ? (cat.total/total)*100 : 0;
+    const budget = budgets[cat.id];
+    const overBudget = budget && cat.total > budget;
+    const budgetPct = budget ? Math.min((cat.total/budget)*100, 100) : pct;
+    const barColor = overBudget ? "var(--red)" : cat.color;
+    const div = document.createElement("div"); div.className = "bar-row";
+    div.innerHTML = `
+      <div class="bar-label">
+        <span>${cat.emoji} ${escapeHtml(cat.label)}${overBudget ? ' <span style="color:var(--red);font-size:9px">▲ LÍMITE</span>' : ""}</span>
+        <span style="color:${barColor}">${fmt(cat.total)}${budget ? ` <span class="bar-budget-info" style="color:var(--text-mute)">/ ${fmt(budget)}</span>` : ""}</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${budget ? budgetPct : pct}%;background:${barColor};box-shadow:0 0 8px ${barColor}66"></div>
+      </div>
+      <div class="bar-pct">
+        <span style="color:${barColor}99">${Math.round(pct)}% del total</span>
+        ${budget ? `<span style="color:var(--text-mute)">${Math.round(budgetPct)}% del límite</span>` : ""}
+      </div>`;
+    barsEl.appendChild(div);
+  });
+
+  // Historial mensual
+  const histEl = $("month-history"); histEl.innerHTML = "";
+  if (months.length > 1) {
+    const title = document.createElement("div"); title.className = "section-title"; title.style.marginTop = "24px";
+    title.innerHTML = "<span>HISTORIAL MENSUAL</span>"; histEl.appendChild(title);
+    const ess = getESSENTIAL();
+    [...months].reverse().forEach(m => {
+      const mTotal = all.filter(e => e.month === m).reduce((s,e) => s+e.amount, 0);
+      const mEss = all.filter(e => e.month === m && ess.includes(e.category)).reduce((s,e) => s+e.amount, 0);
+      const [yr,mo] = m.split("-");
+      const label = new Date(yr, mo-1).toLocaleDateString("es-CL",{month:"long",year:"numeric"}).toUpperCase();
+      const row = document.createElement("div"); row.className = "month-row";
+      row.innerHTML = `<div><div class="month-label">${label}</div><div class="month-essential">Esencial: ${fmt(mEss)}</div></div><div class="month-total">${fmt(mTotal)}</div>`;
+      histEl.appendChild(row);
+    });
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// RECUR.JS — gastos fijos mensuales
+// ════════════════════════════════════════════════════════════════════
+function renderRecurrentes() {
+  const list = $("recur-list"); list.innerHTML = "";
+  const emptyEl = $("recur-empty");
+  const items = liveRecurring();
+  if (items.length === 0) { emptyEl.style.display = "block"; return; }
+  emptyEl.style.display = "none";
+  items.forEach(r => {
+    const cat = catById(r.category);
+    const row = document.createElement("div"); row.className = "recur-row";
+    row.innerHTML = `
+      <div class="recur-dot" style="background:${cat.color}"></div>
+      <div class="recur-info">
+        <div class="recur-name">${cat.emoji} ${escapeHtml(cat.label)}</div>
+        ${r.note ? `<div class="recur-cat">${escapeHtml(r.note)}</div>` : ""}
+      </div>
+      <div class="recur-right">
+        <div class="recur-amount">${fmt(r.amount)}</div>
+        <div class="action-btns">
+          <button class="icon-btn edit-icon" title="Editar">✏️</button>
+          <button class="icon-btn del-icon" title="Eliminar">×</button>
+        </div>
+      </div>`;
+    row.querySelector(".edit-icon").addEventListener("click", () => openRecurModal(r));
+    row.querySelector(".del-icon").addEventListener("click", () => {
+      showConfirm("Eliminar gasto fijo", `¿Eliminar ${fmt(r.amount)} en ${cat.label}?`, "Eliminar",
+        () => { deleteRecurring(r.id); renderRecurrentes(); });
+    });
+    list.appendChild(row);
+  });
+}
+
+$("apply-recurring-btn").addEventListener("click", () => {
+  const items = liveRecurring();
+  if (items.length === 0) return;
+  showConfirm("Aplicar gastos fijos",
+    `Se agregarán ${items.length} gasto(s) fijo(s) al mes actual. Los que ya estén registrados este mes no se duplican.`,
+    "Aplicar",
+    () => {
+      const yaAplicados = monthlyEx().filter(e => e.recurring).map(e => e.category + "|" + (e.note||""));
+      let added = 0;
+      items.forEach(r => {
+        if (!yaAplicados.includes(r.category + "|" + (r.note||""))) { addExpenseRecord(r.amount, r.category, r.note, true); added++; }
+      });
+      updateStrip(); renderRecurrentes();
+      setTimeout(() => showConfirm("Listo", `Se aplicaron ${added} gasto(s) fijo(s) al mes actual.`, "OK", () => {}, false), 250);
+    }, false);
+});
+
+buildCatGrid("cat-grid-recur", () => recurCat, id => { recurCat = id; updateSaveRecurBtn(); });
+buildKeypad("keypad-recur", k => {
+  processKey(k, () => recurInput, v => { recurInput = v; updateDisplay("recur", recurInput); updateSaveRecurBtn(); });
+});
+function updateSaveRecurBtn() {
+  $("save-recur-btn").disabled = !(recurInput && parseFloat(recurInput) > 0 && recurCat);
+}
+function openRecurModal(r) {
+  editRecurId = r.id; recurInput = String(r.amount); recurCat = r.category;
+  $("note-recur").value = r.note || "";
+  updateDisplay("recur", recurInput); updateCatGrid("cat-grid-recur", () => recurCat); updateSaveRecurBtn();
+  $("modal-recur").classList.add("open");
+}
+function closeRecurModal() { $("modal-recur").classList.remove("open"); editRecurId = null; }
+$("modal-recur-close").addEventListener("click", closeRecurModal);
+$("modal-recur").addEventListener("click", e => { if (e.target === $("modal-recur")) closeRecurModal(); });
+$("save-recur-btn").addEventListener("click", () => {
+  const amount = parseFloat(recurInput); if (!amount || !recurCat) return;
+  recurring = recurring.map(r => r.id === editRecurId
+    ? {...r, amount, category:recurCat, note:$("note-recur").value.trim(), updatedAt:nowISO(), _dirty:true}
+    : r);
+  persistRecurring(); closeRecurModal(); renderRecurrentes();
+});
+
+
+// ════════════════════════════════════════════════════════════════════
+// BUDGET.JS — límite mensual por categoría
+// ════════════════════════════════════════════════════════════════════
+function renderPresupuesto() {
+  const list = $("budget-list"); list.innerHTML = "";
+  CATEGORIES.forEach(cat => {
+    const row = document.createElement("div"); row.className = "budget-input-row";
+    row.innerHTML = `
+      <div class="budget-cat-info">
+        <span class="budget-cat-emoji">${cat.emoji}</span>
+        <span class="budget-cat-label" style="color:${cat.color}">${escapeHtml(cat.label)}</span>
+      </div>
+      <input class="budget-amount-input" type="number" data-cat="${cat.id}" placeholder="Sin límite" value="${budgets[cat.id] || ""}" min="0"/>`;
+    list.appendChild(row);
+  });
+}
+$("save-budget-btn").addEventListener("click", () => {
+  document.querySelectorAll(".budget-amount-input").forEach(inp => {
+    const v = parseFloat(inp.value);
+    if (v > 0) budgets[inp.dataset.cat] = v; else delete budgets[inp.dataset.cat];
+  });
+  persistSettings();
+  const btn = $("save-budget-btn");
+  btn.textContent = "✓ GUARDADO"; setTimeout(() => btn.textContent = "GUARDAR LÍMITES", 1500);
+});
+
+
+// ════════════════════════════════════════════════════════════════════
+// CATS.JS — administrador de categorías
+// ════════════════════════════════════════════════════════════════════
+let catEditorId = null, catEditorEmoji = "📦", catEditorColor = "#6b7280", catEditorEssential = false;
+
+function renderCatManager() {
+  const list = $("cat-manager-list"); list.innerHTML = "";
+  if (CATEGORIES.length === 0) { list.innerHTML = '<div class="empty">Sin categorías. Añade una con + NUEVA</div>'; return; }
+  CATEGORIES.forEach(cat => {
+    const usageCount = liveExpenses().filter(e => e.category === cat.id).length;
+    const isDefault = DEFAULT_CATEGORIES.some(d => d.id === cat.id);
+    const row = document.createElement("div"); row.className = "cat-manager-row";
+    row.innerHTML = `
+      <div class="cat-manager-swatch" style="background:${cat.color}22;border-color:${cat.color}44"><span>${cat.emoji}</span></div>
+      <div class="cat-manager-info">
+        <div class="cat-manager-label" style="color:${cat.color}">${escapeHtml(cat.label)}</div>
+        <div class="cat-manager-meta">
+          ${cat.essential ? "💚 esencial · " : ""}${usageCount} gasto${usageCount !== 1 ? "s" : ""}${isDefault ? " · predeterminada" : ""}
+        </div>
+      </div>
+      <div class="cat-manager-actions">
+        <button class="icon-btn edit-icon" title="Editar">✏️</button>
+        <button class="icon-btn del-icon" title="Eliminar">×</button>
+      </div>`;
+    row.querySelector(".edit-icon").addEventListener("click", () => openCatEditor(cat));
+    row.querySelector(".del-icon").addEventListener("click", () => {
+      const msg = usageCount > 0
+        ? `"${cat.label}" tiene ${usageCount} gasto(s) registrado(s). Si la eliminas, esos gastos quedarán sin categoría visible. ¿Continuar?`
+        : `¿Eliminar la categoría "${cat.label}"?`;
+      showConfirm("Eliminar categoría", msg, usageCount > 0 ? "Eliminar igual" : "Eliminar", () => {
+        CATEGORIES = CATEGORIES.filter(c => c.id !== cat.id);
+        persistSettings(); rebuildAllCatGrids(); renderCatManager();
+      });
+    });
+    list.appendChild(row);
+  });
+}
+
+function openCatEditor(cat) {
+  catEditorId        = cat ? cat.id : null;
+  catEditorEmoji     = cat ? cat.emoji : "📦";
+  catEditorColor     = cat ? cat.color : COLOR_OPTIONS[Math.floor(Math.random()*COLOR_OPTIONS.length)];
+  catEditorEssential = cat ? !!cat.essential : false;
+
+  $("modal-cat-title").textContent = cat ? "EDITAR CATEGORÍA" : "NUEVA CATEGORÍA";
+  $("cat-name-input").value = cat ? cat.label : "";
+  $("cat-emoji-custom").value = "";
+  $("essential-switch").classList.toggle("on", catEditorEssential);
+
+  const el = $("emoji-picker"); el.innerHTML = "";
+  EMOJI_OPTIONS.forEach(em => {
+    const opt = document.createElement("div");
+    opt.className = "emoji-opt" + (em === catEditorEmoji ? " selected" : "");
+    opt.textContent = em;
+    opt.addEventListener("click", () => {
+      catEditorEmoji = em; $("cat-emoji-custom").value = "";
+      el.querySelectorAll(".emoji-opt").forEach(o => o.classList.remove("selected"));
+      opt.classList.add("selected");
+    });
+    el.appendChild(opt);
+  });
+  buildPickerGrid("color-picker", COLOR_OPTIONS, () => catEditorColor, c => { catEditorColor = c; });
+
+  $("modal-cat").classList.add("open");
+  $("cat-name-input").focus();
+}
+
+$("cat-emoji-custom").addEventListener("input", e => {
+  const val = [...e.target.value].slice(0,2).join("");
+  if (val) { catEditorEmoji = val; $("emoji-picker").querySelectorAll(".emoji-opt").forEach(o => o.classList.remove("selected")); }
+});
+$("essential-toggle").addEventListener("click", () => {
+  catEditorEssential = !catEditorEssential;
+  $("essential-switch").classList.toggle("on", catEditorEssential);
+});
+$("save-cat-btn").addEventListener("click", () => {
+  const name = $("cat-name-input").value.trim();
+  if (!name) { $("cat-name-input").focus(); return; }
+  if (catEditorId) {
+    CATEGORIES = CATEGORIES.map(c => c.id === catEditorId
+      ? {...c, label:name, emoji:catEditorEmoji, color:catEditorColor, essential:catEditorEssential} : c);
+  } else {
+    CATEGORIES.push({id:"cat_"+uid(), label:name, emoji:catEditorEmoji, color:catEditorColor, essential:catEditorEssential});
+  }
+  persistSettings(); rebuildAllCatGrids(); closeCatModal(); renderCatManager();
+});
+function closeCatModal() { $("modal-cat").classList.remove("open"); catEditorId = null; }
+$("modal-cat-close").addEventListener("click", closeCatModal);
+$("modal-cat").addEventListener("click", e => { if (e.target === $("modal-cat")) closeCatModal(); });
+$("new-cat-btn").addEventListener("click", () => openCatEditor(null));
+
+function rebuildAllCatGrids() {
+  buildCatGrid("cat-grid-home",  () => homeCat,  id => { homeCat = id; updateAddBtn(); });
+  buildCatGrid("cat-grid-edit",  () => editCat,  id => { editCat = id; updateSaveEditBtn(); });
+  buildCatGrid("cat-grid-recur", () => recurCat, id => { recurCat = id; updateSaveRecurBtn(); });
+  if (currentView === "presupuesto") renderPresupuesto();
+  if (currentView === "resumen")     renderResumen();
+  if (currentView === "historial")   renderHistorial();
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// DATA.JS — exportar / importar / borrar todo
+// ════════════════════════════════════════════════════════════════════
+function downloadFile(name, type, content) {
+  const blob = new Blob([content], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function csvCell(v) { return '"' + String(v ?? "").replace(/"/g,'""') + '"'; }
+
+$("export-csv-btn").addEventListener("click", () => {
+  const rows = liveExpenses();
+  if (rows.length === 0) return;
+  const header = "Fecha,Mes,Categoría,Monto,Quién,Nota,Fijo,Etiquetas\n";
+  const body = rows.map(e => [
+    csvCell(new Date(e.date).toLocaleDateString("es-CL")),
+    csvCell(e.month),
+    csvCell(catById(e.category).label),
+    e.amount,
+    csvCell(e.author || ""),
+    csvCell(e.note || ""),
+    csvCell(e.recurring ? "Sí" : "No"),
+    csvCell((e.tags||[]).join(";"))
+  ].join(","));
+  downloadFile("gastos-casa.csv", "text/csv;charset=utf-8", "﻿" + header + body.join("\n"));
+});
+
+$("export-json-btn").addEventListener("click", () => {
+  const data = JSON.stringify({
+    _app:"GastosCasa", _type:"backup_v1", _exportedAt: nowISO(),
+    expenses, recurring, budgets, categories: CATEGORIES, people: PEOPLE
+  }, null, 2);
+  downloadFile("gastos-casa-backup.json", "application/json", data);
+});
+
+$("import-btn").addEventListener("click", () => $("import-file").click());
+$("import-file").addEventListener("change", e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    let data;
+    try { data = JSON.parse(ev.target.result); } catch { data = null; }
+    if (!data || !Array.isArray(data.expenses)) {
+      showConfirm("Archivo no válido", "Asegurate de importar un backup exportado por esta app.", "OK", () => {}, false);
+      return;
+    }
+    showConfirm("Restaurar backup", "¿Reemplazar todos los datos actuales con los del archivo?", "Restaurar", () => {
+      expenses   = data.expenses || [];
+      recurring  = data.recurring || [];
+      budgets    = data.budgets || {};
+      CATEGORIES = data.categories || CATEGORIES;
+      PEOPLE     = data.people || PEOPLE;
+      migrateLegacy();
+      // Todo lo importado se considera cambio local → se sube a la nube.
+      expenses  = expenses.map(x => ({...x, _dirty:true}));
+      recurring = recurring.map(x => ({...x, _dirty:true}));
+      persistExpenses(); persistRecurring(); persistSettings();
+      rebuildAllCatGrids(); rebuildAllPayerRows(); updateStrip(); renderCurrentView();
+      showConfirm("Listo", "Datos restaurados correctamente.", "OK", () => {}, false);
+    });
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+
+$("clear-btn").addEventListener("click", () => {
+  showConfirm("Borrar todo",
+    "¿Eliminar TODOS los gastos, fijos y límites de este teléfono? Si la nube está conectada, también se borran para la otra persona. Esta acción no se puede deshacer.",
+    "Borrar todo", () => {
+      expenses  = expenses.map(e  => ({...e, deleted:true, updatedAt:nowISO(), _dirty:true}));
+      recurring = recurring.map(r => ({...r, deleted:true, updatedAt:nowISO(), _dirty:true}));
+      budgets = {};
+      persistExpenses(); persistRecurring(); persistSettings();
+      updateStrip(); renderCurrentView();
+    });
+});
+
+
+// ════════════════════════════════════════════════════════════════════
+// SUPABASE.JS — conexión OPCIONAL con la nube
+// ────────────────────────────────────────────────────────────────────
+// Config en localStorage['gastos_sb_config'] = { url, anonKey, ns }.
+// `ns` es la CASA: los dos teléfonos tienen que usar el mismo `ns` para
+// verse los gastos. Cada persona entra con SU usuario (email + contraseña)
+// de Supabase Auth; el nombre para mostrar sale de la tabla casa_members.
+//
+// Si no hay config, `sbReady()` es false y toda esta capa queda muerta:
+// la app sigue funcionando 100% local.
+// ════════════════════════════════════════════════════════════════════
+function sbConfigured() { return !!(sbConfig && sbConfig.url && sbConfig.anonKey); }
+function sbReady()      { return !!(sbClient && sbSession); }
+function sbNs()         { return (sbConfig && sbConfig.ns) || NS_DEFAULT; }
+
+function sbInit() {
+  if (!sbConfigured() || !window.supabase) { sbClient = null; return false; }
+  try {
+    sbClient = window.supabase.createClient(sbConfig.url, sbConfig.anonKey, {
+      auth: { persistSession: true, autoRefreshToken: true, storageKey: SB_AUTH_KEY, detectSessionInUrl: false }
+    });
+    return true;
+  } catch (e) {
+    console.warn("No se pudo crear el cliente de Supabase", e);
+    sbClient = null; return false;
+  }
+}
+
+// ¿Hay una sesión guardada en este teléfono? (sin exigir que el token esté
+// vigente: offline se renueva solo al volver internet).
+function sbHasStoredSession() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k === SB_AUTH_KEY || (k && k.startsWith("sb-") && k.endsWith("-auth-token"))) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+async function sbLoadSession() {
+  if (!sbClient) return null;
+  try {
+    const { data } = await sbClient.auth.getSession();
+    sbSession = data && data.session ? data.session : null;
+  } catch (e) { sbSession = null; }
+  return sbSession;
+}
+
+async function sbLogin(email, password) {
+  if (!sbClient && !sbInit()) throw new Error("Falta configurar la conexión.");
+  const { data, error } = await sbClient.auth.signInWithPassword({ email: email.trim(), password });
+  if (error) throw error;
+  sbSession = data.session;
+  save(SB_SKIP_KEY, false);
+  await afterLogin();
+  return sbSession;
+}
+
+async function sbLogout() {
+  try { if (sbClient) await sbClient.auth.signOut(); } catch (e) {}
+  sbSession = null;
+  stopRealtime();
+  setSync("off");
+  gateRefresh();
+  sbRefreshUI();
+}
+
+// Tras iniciar sesión: traer quién soy, sincronizar y engancharse al realtime.
+async function afterLogin() {
+  await pullMembers();
+  // Con sesión iniciada, el que paga soy yo (el selector queda bloqueado).
+  homePayer = meId;
+  await fullSync();
+  startRealtime();
+  gateRefresh();
+  sbRefreshUI();
+  renderUserChip();
+  rebuildAllPayerRows();
+  updateAddBtn();
+  renderCurrentView();
+}
+
+// ── Personas con usuario propio (tabla casa_members) ──────────────────
+async function pullMembers() {
+  if (!sbReady()) return;
+  try {
+    const { data, error } = await sbClient.from("casa_members").select("*").eq("ns", sbNs());
+    if (error) throw error;
+    let changed = false;
+    (data || []).forEach(m => {
+      const existing = personByName(m.name);
+      if (existing) {
+        // La persona ya existía localmente: le pegamos el user_id para poder
+        // reconocerla, y respetamos el color que venga de la nube.
+        if (existing.uid !== m.user_id || existing.color !== m.color) {
+          existing.uid = m.user_id; existing.color = m.color || existing.color; changed = true;
+        }
+      } else {
+        PEOPLE.push({ id: "u_" + m.user_id, uid: m.user_id, name: m.name, color: m.color || COLOR_OPTIONS[0] });
+        changed = true;
+      }
+    });
+    // Quién soy = la persona cuyo user_id es el de mi sesión.
+    const myUid = sbSession && sbSession.user ? sbSession.user.id : null;
+    const mine = PEOPLE.find(p => p.uid && p.uid === myUid);
+    if (mine && meId !== mine.id) { meId = mine.id; save("gastos_me", meId); homePayer = meId; changed = true; }
+    if (changed) { save("gastos_people", PEOPLE); renderUserChip(); rebuildAllPayerRows(); }
+  } catch (e) {
+    console.warn("pullMembers falló", e);
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// SYNC.JS — subir cambios locales y bajar los del otro teléfono
+// ────────────────────────────────────────────────────────────────────
+// Modelo: fila por gasto, borrado lógico (`deleted`) y last-write-wins por
+// `updated_at` (lo escribe la app). El cursor de bajada usa `synced_at`
+// (lo escribe el servidor con un trigger), así no depende del reloj de los
+// teléfonos. Lo que todavía no subió queda marcado con `_dirty` y se
+// reintenta al volver la conexión.
+// ════════════════════════════════════════════════════════════════════
+let pushTimer = null;
+let syncing = false;
+
+function schedulePush() {
+  if (!sbReady()) return;
+  setSync("pending");
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => { pushDirty(); }, 700);
+}
+
+function expToRow(e) {
+  return {
+    ns: sbNs(), id: String(e.id), amount: e.amount, category: e.category,
+    note: e.note || null, tags: e.tags || [], month: e.month, date: e.date,
+    recurring: !!e.recurring, author: e.author || null,
+    author_id: (personByName(e.author) || {}).uid || null,
+    deleted: !!e.deleted, updated_at: e.updatedAt || nowISO()
+  };
+}
+function rowToExp(r) {
+  return {
+    id: String(r.id), amount: Number(r.amount), category: r.category,
+    note: r.note || "", tags: Array.isArray(r.tags) ? r.tags : [],
+    month: r.month, date: r.date, recurring: !!r.recurring,
+    author: r.author || null, authorId: null,
+    updatedAt: r.updated_at, deleted: !!r.deleted
+  };
+}
+function recToRow(r) {
+  return { ns: sbNs(), id: String(r.id), amount: r.amount, category: r.category,
+           note: r.note || null, deleted: !!r.deleted, updated_at: r.updatedAt || nowISO() };
+}
+function rowToRec(r) {
+  return { id: String(r.id), amount: Number(r.amount), category: r.category,
+           note: r.note || "", updatedAt: r.updated_at, deleted: !!r.deleted };
+}
+
+async function pushDirty() {
+  if (!sbReady() || syncing) return;
+  const dirtyE = expenses.filter(e => e._dirty);
+  const dirtyR = recurring.filter(r => r._dirty);
+  if (!dirtyE.length && !dirtyR.length) { setSync("ok"); return; }
+  syncing = true; setSync("pending");
+  try {
+    if (dirtyE.length) {
+      const { error } = await sbClient.from("casa_expenses").upsert(dirtyE.map(expToRow), { onConflict: "ns,id" });
+      if (error) throw error;
+      dirtyE.forEach(e => { delete e._dirty; });
+      save("gastos_data", expenses);
+    }
+    if (dirtyR.length) {
+      const { error } = await sbClient.from("casa_recurring").upsert(dirtyR.map(recToRow), { onConflict: "ns,id" });
+      if (error) throw error;
+      dirtyR.forEach(r => { delete r._dirty; });
+      save("gastos_recurring", recurring);
+    }
+    setSync("ok");
+  } catch (e) {
+    console.warn("pushDirty falló", e);
+    setSync("error");
+  } finally { syncing = false; }
+}
+
+// Config compartida (categorías, límites, personas). Es una fila por clave.
+let settingsPushTimer = null;
+function pushSettings() {
+  if (!sbReady()) return;
+  clearTimeout(settingsPushTimer);
+  settingsPushTimer = setTimeout(async () => {
+    try {
+      const rows = [
+        { ns: sbNs(), key: "categories", value: CATEGORIES, updated_at: nowISO() },
+        { ns: sbNs(), key: "budgets",    value: budgets,    updated_at: nowISO() },
+        { ns: sbNs(), key: "people",     value: PEOPLE.map(p => ({id:p.id, name:p.name, color:p.color})), updated_at: nowISO() }
+      ];
+      const { error } = await sbClient.from("casa_settings").upsert(rows, { onConflict: "ns,key" });
+      if (error) throw error;
+      setSync("ok");
+    } catch (e) { console.warn("pushSettings falló", e); setSync("error"); }
+  }, 900);
+}
+
+// ── Merge (last-write-wins) ───────────────────────────────────────────
+function newer(a, b) { return Date.parse(a || 0) > Date.parse(b || 0); }
+
+function mergeExpenseRow(row) {
+  const inc = rowToExp(row);
+  const idx = expenses.findIndex(e => String(e.id) === inc.id);
+  if (idx < 0) { expenses.push(inc); return true; }
+  const local = expenses[idx];
+  // Si lo de la nube es más nuevo, gana. Empate → gana lo local (evita
+  // pisar un cambio propio recién hecho con el eco de nuestro propio push).
+  if (newer(inc.updatedAt, local.updatedAt)) {
+    expenses[idx] = local._dirty ? {...inc, _dirty: false} : inc;
+    return true;
+  }
+  return false;
+}
+function mergeRecurRow(row) {
+  const inc = rowToRec(row);
+  const idx = recurring.findIndex(r => String(r.id) === inc.id);
+  if (idx < 0) { recurring.push(inc); return true; }
+  if (newer(inc.updatedAt, recurring[idx].updatedAt)) { recurring[idx] = inc; return true; }
+  return false;
+}
+function mergeSettingRow(row) {
+  const localStamp = load("gastos_settings_stamp", {});
+  if (!newer(row.updated_at, localStamp[row.key])) return false;
+  if (row.key === "categories" && Array.isArray(row.value)) { CATEGORIES = row.value; save("gastos_categories", CATEGORIES); }
+  else if (row.key === "budgets" && row.value && typeof row.value === "object") { budgets = row.value; save("gastos_budgets", budgets); }
+  else if (row.key === "people" && Array.isArray(row.value)) {
+    // Mezcla por nombre para no perder el `uid` que trajo casa_members.
+    row.value.forEach(p => { if (!personByName(p.name)) PEOPLE.push({...p}); });
+    save("gastos_people", PEOPLE);
+  } else return false;
+  localStamp[row.key] = row.updated_at;
+  save("gastos_settings_stamp", localStamp);
+  return true;
+}
+
+// ── Bajada incremental ────────────────────────────────────────────────
+async function pullRemote() {
+  if (!sbReady()) return false;
+  const cur = load(SB_CURSOR_KEY, {});
+  const ns = sbNs();
+  let touched = false;
+
+  async function pullTable(table, cursorKey, mergeFn) {
+    const since = cur[cursorKey] || "1970-01-01T00:00:00.000Z";
+    const { data, error } = await sbClient.from(table).select("*")
+      .eq("ns", ns).gt("synced_at", since).order("synced_at", { ascending: true }).limit(2000);
+    if (error) throw error;
+    (data || []).forEach(row => { if (mergeFn(row)) touched = true; });
+    if (data && data.length) cur[cursorKey] = data[data.length-1].synced_at;
+  }
+
+  try {
+    await pullTable("casa_expenses",  "expenses",  mergeExpenseRow);
+    await pullTable("casa_recurring", "recurring", mergeRecurRow);
+    await pullTable("casa_settings",  "settings",  mergeSettingRow);
+    save(SB_CURSOR_KEY, cur);
+    if (touched) {
+      save("gastos_data", expenses); save("gastos_recurring", recurring);
+      afterRemoteChange();
+    }
+    setSync("ok");
+    return touched;
+  } catch (e) {
+    console.warn("pullRemote falló", e);
+    setSync("error");
+    return false;
+  }
+}
+
+// Repinta lo que esté a la vista cuando llegan cambios del otro teléfono.
+function afterRemoteChange() {
+  updateStrip();
+  rebuildAllCatGrids();
+  rebuildAllPayerRows();
+  renderUserChip();
+  renderCurrentView();
+}
+
+async function fullSync() {
+  if (!sbReady()) { setSync("off"); return; }
+  await pushDirty();
+  await pullRemote();
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// REALTIME.JS — el otro teléfono carga un gasto y acá aparece solo
+// ════════════════════════════════════════════════════════════════════
+let rtChannel = null;
+
+function startRealtime() {
+  if (!sbReady()) return;
+  stopRealtime();
+  try {
+    const ns = sbNs();
+    rtChannel = sbClient.channel("casa-" + ns)
+      .on("postgres_changes", { event: "*", schema: "public", table: "casa_expenses", filter: "ns=eq." + ns },
+          p => { if (p.new && mergeExpenseRow(p.new)) { save("gastos_data", expenses); bumpCursor("expenses", p.new.synced_at); afterRemoteChange(); } })
+      .on("postgres_changes", { event: "*", schema: "public", table: "casa_recurring", filter: "ns=eq." + ns },
+          p => { if (p.new && mergeRecurRow(p.new)) { save("gastos_recurring", recurring); bumpCursor("recurring", p.new.synced_at); afterRemoteChange(); } })
+      .on("postgres_changes", { event: "*", schema: "public", table: "casa_settings", filter: "ns=eq." + ns },
+          p => { if (p.new && mergeSettingRow(p.new)) { bumpCursor("settings", p.new.synced_at); afterRemoteChange(); } })
+      .subscribe(status => { if (status === "SUBSCRIBED") setSync("ok"); });
+  } catch (e) { console.warn("Realtime no disponible", e); }
+}
+function stopRealtime() {
+  if (rtChannel && sbClient) { try { sbClient.removeChannel(rtChannel); } catch (e) {} }
+  rtChannel = null;
+}
+function bumpCursor(key, stamp) {
+  if (!stamp) return;
+  const cur = load(SB_CURSOR_KEY, {});
+  if (newer(stamp, cur[key])) { cur[key] = stamp; save(SB_CURSOR_KEY, cur); }
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// GATE.JS — pantalla de login que tapa la app cuando hay nube
+// ════════════════════════════════════════════════════════════════════
+function gateRefresh() {
+  const gate = $("auth-gate");
+  const debeMostrar = sbConfigured() && !sbSession && !load(SB_SKIP_KEY, false);
+  gate.classList.toggle("open", debeMostrar);
+}
+
+$("gate-login-btn").addEventListener("click", async () => {
+  const btn = $("gate-login-btn"), st = $("gate-status");
+  st.className = "status-line"; st.textContent = "Entrando…";
+  btn.disabled = true;
+  try {
+    await sbLogin($("gate-email").value, $("gate-pass").value);
+    $("gate-pass").value = "";
+    st.textContent = "";
+  } catch (e) {
+    st.className = "status-line status-err";
+    st.textContent = "No se pudo entrar: " + (e.message || e);
+  } finally { btn.disabled = false; }
+});
+$("gate-pass").addEventListener("keydown", e => { if (e.key === "Enter") $("gate-login-btn").click(); });
+$("gate-config-link").addEventListener("click", () => {
+  save(SB_SKIP_KEY, true); gateRefresh(); switchView("datos");
+});
+$("gate-offline-link").addEventListener("click", () => {
+  save(SB_SKIP_KEY, true); gateRefresh();
+});
+
+
+// ════════════════════════════════════════════════════════════════════
+// NUBE_UI.JS — sección ☁ NUBE COMPARTIDA de la pestaña DATOS
+// ════════════════════════════════════════════════════════════════════
+function sbRefreshUI() {
+  const st = $("sb-status");
+  const configured = sbConfigured();
+  $("sb-config-form").style.display  = configured ? "none" : "block";
+  $("sb-login-form").style.display   = configured && !sbSession ? "block" : "none";
+  $("sb-session-box").style.display  = sbSession ? "block" : "none";
+  $("sb-forget-btn").style.display   = configured ? "block" : "none";
+
+  if (!configured) {
+    st.className = "status-line";
+    st.innerHTML = "Sin configurar. La app funciona igual, pero los gastos <b>no se comparten</b> con nadie.<br>Cargá los datos del proyecto Supabase para sincronizar con la otra persona.";
+  } else if (!sbSession) {
+    st.className = "status-line";
+    st.innerHTML = `Conectado a <b>${escapeHtml(sbConfig.url.replace(/^https?:\/\//,""))}</b> · casa: <b>${escapeHtml(sbNs())}</b>.<br>Iniciá sesión con tu email para sincronizar.`;
+  } else {
+    const email = sbSession.user ? sbSession.user.email : "";
+    const pend = expenses.filter(e => e._dirty).length + recurring.filter(r => r._dirty).length;
+    st.className = "status-line";
+    st.innerHTML = `Sesión iniciada como <b>${escapeHtml(email)}</b> · casa: <b>${escapeHtml(sbNs())}</b>.<br>` +
+      (pend ? `<span class="status-err">${pend} cambio(s) sin subir.</span>` : `<span class="status-ok">Todo sincronizado.</span>`);
+  }
+}
+
+$("sb-save-btn").addEventListener("click", async () => {
+  const url = $("sb-url").value.trim().replace(/\/+$/,"");
+  const key = $("sb-key").value.trim();
+  const ns  = ($("sb-ns").value.trim() || NS_DEFAULT).toLowerCase();
+  if (!url || !key) { showConfirm("Faltan datos", "Cargá la URL y la anon key del proyecto.", "OK", () => {}, false); return; }
+  sbConfig = { url, anonKey: key, ns };
+  save(SB_CFG_KEY, sbConfig);
+  save(SB_SKIP_KEY, false);
+  sbInit();
+  await sbLoadSession();
+  sbRefreshUI(); gateRefresh();
+});
+
+$("sb-login-btn").addEventListener("click", async () => {
+  const btn = $("sb-login-btn");
+  btn.disabled = true; btn.textContent = "ENTRANDO…";
+  try {
+    await sbLogin($("sb-email").value, $("sb-pass").value);
+    $("sb-pass").value = "";
+  } catch (e) {
+    showConfirm("No se pudo entrar", e.message || String(e), "OK", () => {}, false);
+  } finally { btn.disabled = false; btn.textContent = "INICIAR SESIÓN"; }
+});
+$("sb-pass").addEventListener("keydown", e => { if (e.key === "Enter") $("sb-login-btn").click(); });
+
+$("sb-sync-btn").addEventListener("click", async () => {
+  const btn = $("sb-sync-btn");
+  btn.disabled = true; btn.textContent = "SINCRONIZANDO…";
+  await fullSync();
+  await pullMembers();
+  btn.disabled = false; btn.textContent = "⟳ Sincronizar ahora";
+  sbRefreshUI();
+});
+
+$("sb-logout-btn").addEventListener("click", () => {
+  showConfirm("Cerrar sesión",
+    "Los gastos ya guardados siguen en este teléfono, pero dejás de sincronizar hasta volver a entrar.",
+    "Cerrar sesión", () => sbLogout());
+});
+
+$("sb-forget-btn").addEventListener("click", () => {
+  showConfirm("Olvidar conexión",
+    "Se borra la configuración de la nube de ESTE teléfono. Los gastos locales no se tocan y en la nube tampoco se borra nada.",
+    "Olvidar", async () => {
+      await sbLogout();
+      sbConfig = null; sbClient = null;
+      save(SB_CFG_KEY, null); save(SB_CURSOR_KEY, {});
+      sbRefreshUI(); gateRefresh(); setSync("off");
+    });
+});
+
+
+// ════════════════════════════════════════════════════════════════════
+// THEME.JS — claro / oscuro
+// ════════════════════════════════════════════════════════════════════
+const themeBtn = $("theme-toggle");
+let isLight = load("gastos_theme", false);
+function applyTheme(light) {
+  isLight = light;
+  document.documentElement.classList.toggle("light", light);
+  themeBtn.textContent = light ? "☀️" : "🌙";
+  themeBtn.title = light ? "Cambiar a modo oscuro" : "Cambiar a modo claro";
+  const meta = $("meta-theme"); if (meta) meta.setAttribute("content", light ? "#f7f6f1" : "#080808");
+  save("gastos_theme", light);
+}
+applyTheme(isLight);
+themeBtn.addEventListener("click", () => applyTheme(!isLight));
+
+
+// ════════════════════════════════════════════════════════════════════
+// BOOT.JS — arranque
+// ════════════════════════════════════════════════════════════════════
+async function boot() {
+  migrateLegacy();
+  purgeTombstones();
+
+  // Sin nube, si no eligió quién es y hay una sola persona, la damos por hecha.
+  if (!meId && PEOPLE.length === 1) { meId = PEOPLE[0].id; save("gastos_me", meId); }
+  homePayer = meId;
+
+  renderUserChip();
+  rebuildAllPayerRows();
+  updateDisplay("home", "");
+  updateAddBtn();
+  updateStrip();
+  setSync("off");
+
+  if (sbConfigured()) {
+    sbInit();
+    await sbLoadSession();
+    gateRefresh();
+    if (sbSession) await afterLogin();
+    else if (sbHasStoredSession()) setSync("pending");
+  }
+  sbRefreshUI();
+
+  // Al volver al frente o al recuperar internet: sincronizar.
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && sbReady()) fullSync(); });
+  window.addEventListener("online", () => { if (sbReady()) fullSync(); });
+  window.addEventListener("focus", () => { if (sbReady()) pushDirty(); });
+
+  // Red de seguridad: cada 5 min, por si el realtime se cayó sin avisar.
+  setInterval(() => { if (sbReady() && !document.hidden) pullRemote(); }, 5*60*1000);
+
+  // Service worker (PWA instalable + offline)
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+}
+boot();
+</script>
+</body>
+</html>
