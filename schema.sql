@@ -153,6 +153,7 @@ alter table casa_settings add  constraint casa_settings_value_size check (octet_
 create or replace function public.casa_touch_synced()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.synced_at := now();
@@ -195,6 +196,7 @@ as $$
 $$;
 
 revoke all on function public.casa_is_member(text) from public;
+revoke execute on function public.casa_is_member(text) from anon;
 grant execute on function public.casa_is_member(text) to authenticated;
 
 alter table casa_houses    enable row level security;
@@ -315,7 +317,12 @@ end;
 $$;
 
 revoke all on function public.casa_join(text, text, text, text) from public;
+revoke execute on function public.casa_join(text, text, text, text) from anon;
 grant execute on function public.casa_join(text, text, text, text) to authenticated;
+
+-- Nota: el linter de Supabase avisa que `authenticated` puede ejecutar estas
+-- dos funciones `security definer`. Es a propósito — es exactamente lo que
+-- hace la app al crear la cuenta. Sin ese permiso, nadie podría registrarse.
 
 
 -- ════════════════════════════════════════════════════════════════════
