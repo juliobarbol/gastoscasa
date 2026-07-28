@@ -292,6 +292,10 @@
     .gate-logo .logo-text { display:block; font-size:15px; margin-top:6px; }
     .gate-sub { font-size:10px; color:var(--text-mute); text-align:center; margin-bottom:22px; letter-spacing:.08em; line-height:1.6; }
     .gate-link { display:block; text-align:center; font-size:9px; color:var(--text-mute); margin-top:14px; cursor:pointer; letter-spacing:.08em; text-decoration:underline; }
+    .gate-tabs { display:flex; gap:6px; margin-bottom:16px; }
+    .gate-tab { flex:1; background:var(--bg3); border:1px solid var(--border); color:var(--text-mute); font-family:var(--font); font-size:9px; font-weight:700; letter-spacing:.1em; padding:9px 4px; cursor:pointer; border-radius:4px; transition:all .15s; }
+    .gate-tab.active { border-color:var(--gold); color:var(--gold); background:var(--bg2); }
+    .field-hint { font-size:8px; color:var(--text-mute); line-height:1.5; margin-top:4px; letter-spacing:.03em; }
 
     /* EMPTY */
     .empty { font-size:11px; color:var(--text-mute); text-align:center; padding:40px 0; letter-spacing:.1em; }
@@ -412,15 +416,34 @@
       <span class="logo">⬡</span>
       <span class="logo-text">GASTOS CASA</span>
     </div>
-    <div class="gate-sub">Iniciá sesión para ver y cargar<br>los gastos compartidos.</div>
-    <div class="field">
+    <div class="gate-tabs" id="gate-tabs">
+      <button class="gate-tab active" data-mode="login">ENTRAR</button>
+      <button class="gate-tab" data-mode="signup">CREAR CUENTA</button>
+    </div>
+    <div class="gate-sub" id="gate-sub">Entrá con tu cuenta para ver y cargar<br>los gastos compartidos.</div>
+
+    <div class="field gate-f-name" style="display:none">
+      <div class="field-label">TU NOMBRE</div>
+      <input class="field-input" id="gate-name" type="text" autocomplete="name" maxlength="16" placeholder="Como querés que te vean"/>
+    </div>
+    <div class="field gate-f-email">
       <div class="field-label">EMAIL</div>
       <input class="field-input" id="gate-email" type="email" autocomplete="username" inputmode="email" placeholder="tu@email.com"/>
     </div>
-    <div class="field">
+    <div class="field gate-f-pass">
       <div class="field-label">CONTRASEÑA</div>
       <input class="field-input" id="gate-pass" type="password" autocomplete="current-password" placeholder="••••••••"/>
     </div>
+    <div class="field gate-f-house" style="display:none">
+      <div class="field-label">NOMBRE DE LA CASA</div>
+      <input class="field-input" id="gate-ns" type="text" maxlength="30" placeholder="casa"/>
+    </div>
+    <div class="field gate-f-house" style="display:none">
+      <div class="field-label">CÓDIGO DE LA CASA</div>
+      <input class="field-input" id="gate-code" type="text" maxlength="40" placeholder="el que te pasó la otra persona"/>
+      <div class="field-hint" id="gate-code-hint">Si la casa todavía no existe, este código queda como el suyo: pasáselo a quien quieras que entre.</div>
+    </div>
+
     <div class="status-line" id="gate-status"></div>
     <button class="add-btn" id="gate-login-btn">ENTRAR</button>
     <span class="gate-link" id="gate-config-link">Configurar conexión</span>
@@ -832,12 +855,10 @@ const DEFAULT_CATEGORIES = [
   {id:"otros",           label:"Otros",       emoji:"📦",  color:"#6b7280", essential:false},
 ];
 
-// Personas de la casa. Se pueden editar en DATOS → Personas; con nube, las
-// que tienen usuario propio llegan desde la tabla casa_members.
-const DEFAULT_PEOPLE = [
-  {id:"julio",   name:"Julio",   color:"#f59e0b"},
-  {id:"javiera", name:"Javiera", color:"#ec4899"},
-];
+// Personas de la casa. NO viene nadie por defecto: cada uno se crea su
+// cuenta en el gate (y queda en casa_members), o se agrega a mano en
+// DATOS → Personas si se usa la app sin nube.
+const DEFAULT_PEOPLE = [];
 
 const KEYS = [["7","8","9"],["4","5","6"],["1","2","3"],["000","0","⌫"]];
 
@@ -1024,6 +1045,16 @@ function renderUserChip() {
 function buildPayerRow(containerId, getSel, onSel, locked) {
   const el = $(containerId);
   el.innerHTML = '<span class="payer-caption">PAGÓ</span>';
+  // Todavía no hay nadie (primer arranque sin nube): que se cree a sí mismo.
+  if (PEOPLE.length === 0) {
+    const btn = document.createElement("button");
+    btn.className = "payer-btn";
+    btn.textContent = "+ ¿Quién sos?";
+    btn.style.borderColor = "var(--gold)"; btn.style.color = "var(--gold)";
+    btn.addEventListener("click", abrirNuevaPersona);
+    el.appendChild(btn);
+    return;
+  }
   PEOPLE.forEach(p => {
     const btn = document.createElement("button");
     btn.className = "payer-btn" + (locked ? " locked" : "");
@@ -1067,6 +1098,12 @@ function openMeModal() {
     });
     list.appendChild(row);
   });
+  const add = document.createElement("div");
+  add.className = "person-row";
+  add.style.cursor = "pointer";
+  add.innerHTML = '<span class="person-check">+</span><span class="who-name" style="flex:1;color:var(--gold)">Crear persona</span>';
+  add.addEventListener("click", () => { $("modal-me").classList.remove("open"); abrirNuevaPersona(); });
+  list.appendChild(add);
   $("modal-me").classList.add("open");
 }
 $("user-chip").addEventListener("click", openMeModal);
@@ -1104,23 +1141,27 @@ function renderPeopleList() {
     list.appendChild(row);
   });
 }
-$("add-person-btn").addEventListener("click", () => {
+function abrirNuevaPersona() {
   $("person-name-input").value = "";
   personColorSel = COLOR_OPTIONS[Math.floor(Math.random()*COLOR_OPTIONS.length)];
   buildPickerGrid("person-color-picker", COLOR_OPTIONS, () => personColorSel, c => { personColorSel = c; });
   $("modal-person").classList.add("open");
   $("person-name-input").focus();
-});
+}
+$("add-person-btn").addEventListener("click", abrirNuevaPersona);
 $("modal-person-close").addEventListener("click", () => $("modal-person").classList.remove("open"));
 $("modal-person").addEventListener("click", e => { if (e.target === $("modal-person")) $("modal-person").classList.remove("open"); });
 $("save-person-btn").addEventListener("click", () => {
   const name = $("person-name-input").value.trim();
   if (!name) { $("person-name-input").focus(); return; }
   if (personByName(name)) { showConfirm("Ya existe", `Ya hay alguien llamado "${name}".`, "OK", () => {}); return; }
-  PEOPLE.push({id: "p_" + uid(), name, color: personColorSel});
+  const nueva = {id: "p_" + uid(), name, color: personColorSel};
+  PEOPLE.push(nueva);
+  // El primero que se crea es quien está usando el teléfono.
+  if (!meId) { meId = nueva.id; homePayer = meId; save("gastos_me", meId); }
   persistSettings();
   $("modal-person").classList.remove("open");
-  renderPeopleList(); rebuildAllPayerRows();
+  renderUserChip(); renderPeopleList(); rebuildAllPayerRows(); updateAddBtn();
 });
 
 function rebuildAllPayerRows() {
@@ -2204,6 +2245,58 @@ async function sbLogin(email, password) {
   return sbSession;
 }
 
+// ── Alta de cuenta desde la app ──────────────────────────────────────
+// Cualquiera puede crearse su usuario: se crea en Supabase Auth y después
+// `casaJoin()` lo mete en la casa. No hay personas precargadas.
+async function sbSignUp(name, email, password) {
+  if (!sbClient && !sbInit()) throw new Error("Falta configurar la conexión.");
+  const { data, error } = await sbClient.auth.signUp({
+    email: email.trim(), password,
+    options: { data: { name: name.trim() } }
+  });
+  if (error) throw error;
+  sbSession = data.session || null;
+  save(SB_SKIP_KEY, false);
+  // Si el proyecto pide confirmar el mail, todavía no hay sesión: el usuario
+  // ya quedó creado, pero tiene que confirmar y volver a entrar.
+  return !!sbSession;
+}
+
+// Entrar a una casa (o crearla si no existe). Lo resuelve la función
+// `casa_join` del servidor, que además valida el código de la casa: sin él,
+// nadie se mete en una casa ajena aunque adivine el nombre.
+async function casaJoin(ns, code, name) {
+  if (!sbReady()) throw new Error("Primero hay que iniciar sesión.");
+  const { data, error } = await sbClient.rpc("casa_join", {
+    p_ns: String(ns || "").trim().toLowerCase(),
+    p_code: String(code || "").trim(),
+    p_name: String(name || "").trim(),
+    p_color: COLOR_OPTIONS[Math.floor(Math.random() * COLOR_OPTIONS.length)]
+  });
+  if (error) throw new Error(traducirErrorCasa(error));
+  return data;
+}
+// Los mensajes de casa_join ya vienen en castellano y listos para mostrar;
+// acá solo traducimos los errores "de plomería" que no le dicen nada a nadie.
+function traducirErrorCasa(error) {
+  const m = String((error && error.message) || error);
+  if (/could not find the function|does not exist|42883|PGRST202/i.test(m)) {
+    return "Falta correr schema.sql en Supabase (no existe la función casa_join).";
+  }
+  return m;
+}
+
+// ¿Ya soy miembro de la casa configurada? Si no, hay que unirse.
+async function soyMiembro() {
+  if (!sbReady()) return false;
+  try {
+    const uidMe = sbSession.user ? sbSession.user.id : null;
+    const { data, error } = await sbClient.from("casa_members").select("*").eq("ns", sbNs()).eq("user_id", uidMe);
+    if (error) throw error;
+    return !!(data && data.length);
+  } catch (e) { return false; }
+}
+
 async function sbLogout() {
   try { if (sbClient) await sbClient.auth.signOut(); } catch (e) {}
   sbSession = null;
@@ -2215,7 +2308,11 @@ async function sbLogout() {
 
 // Tras iniciar sesión: traer quién soy, sincronizar y engancharse al realtime.
 async function afterLogin() {
+  // Tiene sesión pero todavía no entró a ninguna casa: no hay nada que
+  // sincronizar hasta que se una (la RLS no le deja ver ni escribir nada).
+  if (!(await soyMiembro())) { setGateMode("join"); gateRefresh(); sbRefreshUI(); return; }
   await pullMembers();
+  await pullCasa();
   // Con sesión iniciada, el que paga soy yo (el selector queda bloqueado).
   homePayer = meId;
   await fullSync();
@@ -2229,33 +2326,66 @@ async function afterLogin() {
 }
 
 // ── Personas con usuario propio (tabla casa_members) ──────────────────
+// Con nube, `casa_members` MANDA: las personas de la casa son las que se
+// crearon una cuenta. Lo que haya suelto en local (agregado a mano en modo
+// sin nube) se conserva solo si nadie de la nube se llama igual.
 async function pullMembers() {
   if (!sbReady()) return;
   try {
     const { data, error } = await sbClient.from("casa_members").select("*").eq("ns", sbNs());
     if (error) throw error;
-    let changed = false;
-    (data || []).forEach(m => {
-      const existing = personByName(m.name);
-      if (existing) {
-        // La persona ya existía localmente: le pegamos el user_id para poder
-        // reconocerla, y respetamos el color que venga de la nube.
-        if (existing.uid !== m.user_id || existing.color !== m.color) {
-          existing.uid = m.user_id; existing.color = m.color || existing.color; changed = true;
-        }
-      } else {
-        PEOPLE.push({ id: "u_" + m.user_id, uid: m.user_id, name: m.name, color: m.color || COLOR_OPTIONS[0] });
-        changed = true;
-      }
-    });
-    // Quién soy = la persona cuyo user_id es el de mi sesión.
-    const myUid = sbSession && sbSession.user ? sbSession.user.id : null;
-    const mine = PEOPLE.find(p => p.uid && p.uid === myUid);
-    if (mine && meId !== mine.id) { meId = mine.id; save("gastos_me", meId); homePayer = meId; changed = true; }
-    if (changed) { save("gastos_people", PEOPLE); renderUserChip(); rebuildAllPayerRows(); }
+    (data || []).forEach(m => mergeMemberRow(m));
+    // Sacamos a los que ya no están en la nube (se dieron de baja) pero
+    // conservamos los que nunca tuvieron usuario (modo sin nube).
+    const vivos = new Set((data || []).map(m => m.user_id));
+    const antes = PEOPLE.length;
+    PEOPLE = PEOPLE.filter(p => !p.uid || vivos.has(p.uid));
+    if (PEOPLE.length !== antes) save("gastos_people", PEOPLE);
+    aplicarIdentidad();
   } catch (e) {
     console.warn("pullMembers falló", e);
   }
+}
+
+// Mezcla UNA fila de casa_members (la usa el pull y también el realtime,
+// para que cuando la otra persona se crea la cuenta aparezca al instante).
+function mergeMemberRow(m) {
+  if (!m || !m.user_id) return false;
+  let changed = false;
+  let p = PEOPLE.find(x => x.uid === m.user_id);
+  if (!p) {
+    // ¿Existe local con el mismo nombre? Le pegamos el usuario en vez de duplicar.
+    p = PEOPLE.find(x => !x.uid && pkey(x.name) === pkey(m.name));
+    if (p) { p.uid = m.user_id; changed = true; }
+  }
+  if (!p) {
+    PEOPLE.push({ id: "u_" + m.user_id, uid: m.user_id, name: m.name, color: m.color || COLOR_OPTIONS[0] });
+    changed = true;
+  } else if (p.name !== m.name || (m.color && p.color !== m.color)) {
+    p.name = m.name; if (m.color) p.color = m.color; changed = true;
+  }
+  if (changed) save("gastos_people", PEOPLE);
+  return changed;
+}
+
+// El código de la casa, para poder pasárselo a quien queramos que entre.
+// Solo lo ven los que ya son miembros (lo garantiza la RLS).
+let casaCode = null;
+async function pullCasa() {
+  if (!sbReady()) { casaCode = null; return; }
+  try {
+    const { data, error } = await sbClient.from("casa_houses").select("code").eq("ns", sbNs());
+    if (error) throw error;
+    casaCode = data && data.length ? data[0].code : null;
+  } catch (e) { casaCode = null; }
+}
+
+// Quién soy = la persona cuyo user_id es el de mi sesión.
+function aplicarIdentidad() {
+  const myUid = sbSession && sbSession.user ? sbSession.user.id : null;
+  const mine = PEOPLE.find(p => p.uid && p.uid === myUid);
+  if (mine && meId !== mine.id) { meId = mine.id; save("gastos_me", meId); homePayer = meId; }
+  renderUserChip(); rebuildAllPayerRows(); updateAddBtn();
 }
 
 
@@ -2455,6 +2585,9 @@ function startRealtime() {
           p => { if (p.new && mergeRecurRow(p.new)) { save("gastos_recurring", recurring); bumpCursor("recurring", p.new.synced_at); afterRemoteChange(); } })
       .on("postgres_changes", { event: "*", schema: "public", table: "casa_settings", filter: "ns=eq." + ns },
           p => { if (p.new && mergeSettingRow(p.new)) { bumpCursor("settings", p.new.synced_at); afterRemoteChange(); } })
+      // Alguien se creó la cuenta y entró a la casa: aparece al instante.
+      .on("postgres_changes", { event: "*", schema: "public", table: "casa_members", filter: "ns=eq." + ns },
+          p => { if (p.new && mergeMemberRow(p.new)) afterRemoteChange(); })
       .subscribe(status => { if (status === "SUBSCRIBED") setSync("ok"); });
   } catch (e) { console.warn("Realtime no disponible", e); }
 }
@@ -2470,28 +2603,128 @@ function bumpCursor(key, stamp) {
 
 
 // ════════════════════════════════════════════════════════════════════
-// GATE.JS — pantalla de login que tapa la app cuando hay nube
+// GATE.JS — pantalla de entrada: login, alta de cuenta y unirse a la casa
+// ────────────────────────────────────────────────────────────────────
+// Tres modos:
+//   login  → email + contraseña.
+//   signup → nombre + email + contraseña + casa + código. Crea el usuario
+//            en Supabase Auth y lo mete en la casa (RPC casa_join).
+//   join   → hay sesión pero el usuario todavía no es miembro de la casa
+//            (le pasa a quien confirmó el mail y volvió a entrar).
 // ════════════════════════════════════════════════════════════════════
+let gateMode = "login";
+
+function setGateMode(mode) {
+  gateMode = mode;
+  document.querySelectorAll(".gate-tab").forEach(t => t.classList.toggle("active", t.dataset.mode === mode));
+  $("gate-tabs").style.display = mode === "join" ? "none" : "flex";
+  document.querySelectorAll(".gate-f-name").forEach(el  => el.style.display = mode === "login" ? "none" : "block");
+  document.querySelectorAll(".gate-f-house").forEach(el => el.style.display = mode === "login" ? "none" : "block");
+  document.querySelectorAll(".gate-f-email").forEach(el => el.style.display = mode === "join" ? "none" : "block");
+  document.querySelectorAll(".gate-f-pass").forEach(el  => el.style.display = mode === "join" ? "none" : "block");
+  $("gate-sub").innerHTML = {
+    login:  "Entrá con tu cuenta para ver y cargar<br>los gastos compartidos.",
+    signup: "Creá tu cuenta. Si sos el primero de la casa,<br>elegís vos su nombre y su código.",
+    join:   "Tu cuenta ya existe.<br>Ahora entrá a tu casa para ver los gastos."
+  }[mode];
+  $("gate-login-btn").textContent = { login: "ENTRAR", signup: "CREAR CUENTA", join: "ENTRAR A LA CASA" }[mode];
+  $("gate-offline-link").style.display = mode === "join" ? "none" : "block";
+  if (!$("gate-ns").value) $("gate-ns").value = sbNs();
+  $("gate-status").textContent = "";
+}
+
 function gateRefresh() {
   const gate = $("auth-gate");
-  const debeMostrar = sbConfigured() && !sbSession && !load(SB_SKIP_KEY, false);
+  const debeMostrar = sbConfigured() && !load(SB_SKIP_KEY, false) && (!sbSession || gateMode === "join");
   gate.classList.toggle("open", debeMostrar);
+}
+
+document.querySelectorAll(".gate-tab").forEach(tab => {
+  tab.addEventListener("click", () => setGateMode(tab.dataset.mode));
+});
+
+// Guarda la casa elegida en el gate, para que el resto de la app la use.
+function guardarCasaElegida(ns) {
+  const limpio = String(ns || "").trim().toLowerCase() || NS_DEFAULT;
+  if (sbConfig && sbConfig.ns !== limpio) { sbConfig.ns = limpio; save(SB_CFG_KEY, sbConfig); save(SB_CURSOR_KEY, {}); }
+  return limpio;
 }
 
 $("gate-login-btn").addEventListener("click", async () => {
   const btn = $("gate-login-btn"), st = $("gate-status");
-  st.className = "status-line"; st.textContent = "Entrando…";
+  const setErr = m => { st.className = "status-line status-err"; st.textContent = m; };
+  const setOk  = m => { st.className = "status-line status-ok";  st.textContent = m; };
+  const setInfo= m => { st.className = "status-line";            st.textContent = m; };
   btn.disabled = true;
   try {
-    await sbLogin($("gate-email").value, $("gate-pass").value);
-    $("gate-pass").value = "";
-    st.textContent = "";
+    if (gateMode === "login") {
+      setInfo("Entrando…");
+      await sbLogin($("gate-email").value, $("gate-pass").value);
+      $("gate-pass").value = "";
+      // Entró bien pero todavía no pertenece a ninguna casa → pedirle los datos.
+      if (!(await soyMiembro())) { setGateMode("join"); gateRefresh(); setInfo("Falta entrar a tu casa."); return; }
+      setInfo("");
+
+    } else if (gateMode === "signup") {
+      const nombre = $("gate-name").value.trim();
+      const codigo = $("gate-code").value.trim();
+      if (!nombre) { setErr("Poné tu nombre."); return; }
+      if (!codigo) { setErr("Poné un código para la casa."); return; }
+      setInfo("Creando tu cuenta…");
+      let hayS;
+      try {
+        hayS = await sbSignUp(nombre, $("gate-email").value, $("gate-pass").value);
+      } catch (e) {
+        if (/already registered|already exists/i.test(e.message || "")) {
+          setGateMode("login");
+          setErr("Ese email ya tiene cuenta. Entrá con tu contraseña.");
+          return;
+        }
+        throw e;
+      }
+      if (!hayS) {
+        setGateMode("login");
+        setOk("Cuenta creada. Confirmá el mail que te llegó y después entrá con tu email y contraseña.");
+        return;
+      }
+      guardarCasaElegida($("gate-ns").value);
+      setInfo("Entrando a la casa…");
+      // La cuenta YA está creada. Si el código de la casa está mal, no hay
+      // que volver a crearla: alcanza con reintentar el código en modo "join".
+      try {
+        await casaJoin(sbNs(), codigo, nombre);
+      } catch (e) {
+        setGateMode("join");
+        $("gate-name").value = nombre;
+        gateRefresh();
+        setErr(e.message || String(e));
+        return;
+      }
+      $("gate-pass").value = ""; $("gate-code").value = "";
+      await afterLogin();
+      setInfo("");
+
+    } else { // join
+      const nombre = $("gate-name").value.trim();
+      const codigo = $("gate-code").value.trim();
+      if (!nombre) { setErr("Poné tu nombre."); return; }
+      if (!codigo) { setErr("Poné el código de la casa."); return; }
+      guardarCasaElegida($("gate-ns").value);
+      setInfo("Entrando a la casa…");
+      await casaJoin(sbNs(), codigo, nombre);
+      $("gate-code").value = "";
+      gateMode = "login";
+      await afterLogin();
+      setInfo("");
+    }
   } catch (e) {
-    st.className = "status-line status-err";
-    st.textContent = "No se pudo entrar: " + (e.message || e);
+    setErr(e.message || String(e));
   } finally { btn.disabled = false; }
 });
-$("gate-pass").addEventListener("keydown", e => { if (e.key === "Enter") $("gate-login-btn").click(); });
+
+["gate-pass","gate-code"].forEach(id => {
+  $(id).addEventListener("keydown", e => { if (e.key === "Enter") $("gate-login-btn").click(); });
+});
 $("gate-config-link").addEventListener("click", () => {
   save(SB_SKIP_KEY, true); gateRefresh(); switchView("datos");
 });
@@ -2522,6 +2755,7 @@ function sbRefreshUI() {
     const pend = expenses.filter(e => e._dirty).length + recurring.filter(r => r._dirty).length;
     st.className = "status-line";
     st.innerHTML = `Sesión iniciada como <b>${escapeHtml(email)}</b> · casa: <b>${escapeHtml(sbNs())}</b>.<br>` +
+      (casaCode ? `Código para invitar: <b>${escapeHtml(casaCode)}</b><br>` : "") +
       (pend ? `<span class="status-err">${pend} cambio(s) sin subir.</span>` : `<span class="status-ok">Todo sincronizado.</span>`);
   }
 }
@@ -2616,8 +2850,9 @@ async function boot() {
   if (sbConfigured()) {
     sbInit();
     await sbLoadSession();
+    setGateMode("login");
     gateRefresh();
-    if (sbSession) await afterLogin();
+    if (sbSession) await afterLogin();   // si no es miembro, pasa solo a modo "join"
     else if (sbHasStoredSession()) setSync("pending");
   }
   sbRefreshUI();

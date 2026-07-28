@@ -1,8 +1,8 @@
 # Gastos Casa
 
-App para llevar los gastos de la casa desde el teléfono. Cada gasto queda
-anotado a nombre de quien lo pagó, y los dos teléfonos se ven los gastos **en
-tiempo real**.
+App para llevar los gastos de la casa desde el teléfono. Cada uno se crea su
+cuenta, cada gasto queda anotado a nombre de quien lo pagó, y todos los
+teléfonos de la casa ven los gastos **en tiempo real**.
 
 Es una PWA de un solo archivo (`index.html`), sin build step, servida como
 assets estáticos en Cloudflare. Anda 100% offline; la nube (Supabase) es
@@ -31,24 +31,40 @@ propios gastos.
    sobra para esto).
 2. **SQL Editor** → New query → pegar todo el contenido de
    [`schema.sql`](./schema.sql) → **Run**. Eso crea las tablas, la seguridad
-   por usuario (RLS) y prende el tiempo real.
-3. **Authentication → Users → Add user**: crear un usuario por persona
-   (email + contraseña). Marcá *Auto Confirm User* para no tener que
-   confirmar el mail.
-4. Volver al **SQL Editor** y correr el insert de la sección 8 de
-   `schema.sql` para darle a cada usuario su nombre y color dentro de la casa.
+   por usuario (RLS), el alta de cuentas y prende el tiempo real.
+3. **Authentication → Sign In / Providers → Email**: apagar **"Confirm
+   email"**. Así las cuentas quedan activas al instante. (Si lo dejás
+   prendido funciona igual, pero cada persona tiene que confirmar el mail
+   antes de poder entrar; la app se lo avisa.)
+
+**No hay que crear usuarios a mano**: cada persona se registra sola desde la
+app.
 
 ### 3. Conectar cada teléfono
 
-En la app: pestaña **DATOS** → ☁ **NUBE COMPARTIDA**.
+En la app: pestaña **DATOS** → ☁ **NUBE COMPARTIDA**. Cargá la
+**URL del proyecto** y la **anon key** (están en Supabase, en
+*Project Settings → API*) y guardá.
 
-- **URL del proyecto** y **anon key**: están en Supabase, en
-  *Project Settings → API*.
-- **Casa (namespace)**: dejalo en `casa`. Lo importante es que **los dos
-  teléfonos usen el mismo valor**.
+### 4. Crearse la cuenta
 
-Guardar, y después iniciar sesión con el email y la contraseña de cada
-persona. Listo: a partir de ahí, lo que carga uno le aparece solo al otro.
+Al abrir la app aparece la pantalla de entrada.
+
+**La primera persona** (funda la casa):
+
+1. Pestaña **CREAR CUENTA**.
+2. Nombre, email y contraseña.
+3. **Nombre de la casa**: dejalo en `casa` o poné el que quieras.
+4. **Código de la casa**: inventalo. Este código queda como el de la casa.
+
+**Las demás personas**: lo mismo, pero poniendo el **mismo nombre de casa y
+el mismo código**. Sin el código no pueden entrar, así que es lo que evita
+que un desconocido vea los gastos del hogar.
+
+El código lo tenés siempre a mano en **DATOS → ☁ Nube → "Código para
+invitar"**, para pasárselo a quien quieras sumar.
+
+Listo: a partir de ahí, lo que carga uno le aparece solo al otro.
 
 El puntito al lado del mes muestra cómo va la sincronización:
 🟢 sincronizado · 🟡 subiendo cambios · 🔴 error · ⚫ sin nube.
@@ -72,8 +88,8 @@ El puntito al lado del mes muestra cómo va la sincronización:
   te pasás, la barra del resumen se pone roja.
 - **CATEG.** — categorías propias: nombre, emoji, color y si cuenta como
   gasto esencial (el "mínimo vital" del resumen).
-- **DATOS** — nube, personas de la casa, exportar a CSV o backup JSON,
-  restaurar y borrar todo.
+- **DATOS** — nube (conexión, sesión y código para invitar), personas de la
+  casa, exportar a CSV o backup JSON, restaurar y borrar todo.
 
 ---
 
@@ -81,5 +97,5 @@ El puntito al lado del mes muestra cómo va la sincronización:
 
 - [`CLAUDE.md`](./CLAUDE.md) — arquitectura, mapa de módulos, cómo funciona
   la sincronización y decisiones de producto.
-- [`schema.sql`](./schema.sql) — esquema de la base, seguridad y alta de
-  personas.
+- [`schema.sql`](./schema.sql) — esquema de la base, seguridad (RLS) y la
+  función `casa_join` que resuelve el alta de personas.

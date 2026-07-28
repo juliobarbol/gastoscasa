@@ -19,10 +19,33 @@
 
 
 -- ════════════════════════════════════════════════════════════════════
+-- 0. LAS CASAS
+-- ────────────────────────────────────────────────────────────────────
+-- Cada casa tiene un código. El primero que se registra con un nombre de
+-- casa la CREA y define su código; el resto necesita ese código para
+-- entrar. Sin esto, cualquiera que adivine el nombre de la casa ("casa")
+-- vería los gastos del hogar.
+-- ════════════════════════════════════════════════════════════════════
+create table if not exists casa_houses (
+  ns         text primary key,
+  code       text        not null,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table casa_houses drop constraint if exists casa_houses_ns_len;
+alter table casa_houses add  constraint casa_houses_ns_len   check (char_length(ns) between 2 and 30);
+alter table casa_houses drop constraint if exists casa_houses_code_len;
+alter table casa_houses add  constraint casa_houses_code_len check (char_length(code) between 4 and 40);
+
+
+-- ════════════════════════════════════════════════════════════════════
 -- 1. PERSONAS DE LA CASA
 -- ────────────────────────────────────────────────────────────────────
 -- Une un usuario de Supabase Auth con una casa y un nombre para mostrar.
 -- Sin fila acá, el usuario NO ve nada (las policies dependen de esto).
+-- La fila la crea la función casa_join() cuando la persona se registra
+-- desde la app: no hay que darla de alta a mano.
 -- ════════════════════════════════════════════════════════════════════
 create table if not exists casa_members (
   user_id    uuid primary key references auth.users(id) on delete cascade,
@@ -174,15 +197,27 @@ $$;
 revoke all on function public.casa_is_member(text) from public;
 grant execute on function public.casa_is_member(text) to authenticated;
 
+alter table casa_houses    enable row level security;
 alter table casa_members   enable row level security;
 alter table casa_expenses  enable row level security;
 alter table casa_recurring enable row level security;
 alter table casa_settings  enable row level security;
 
--- casa_members: se LEE (para saber quién es quién en la casa), pero el alta
--- y la baja de personas se hacen desde el panel de Supabase, no desde la app.
+-- casa_members: se LEE (para saber quién es quién en la casa). El alta la
+-- hace casa_join() (security definer), no el cliente; y cada uno puede
+-- cambiar SU nombre y color, nunca los de otro.
 drop policy if exists casa_members_read on casa_members;
 create policy casa_members_read on casa_members
+  for select to authenticated using (casa_is_member(ns));
+
+drop policy if exists casa_members_update_self on casa_members;
+create policy casa_members_update_self on casa_members
+  for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- casa_houses: el código de la casa lo ven SOLO sus miembros (es lo que se
+-- usa para invitar). Nadie escribe acá directamente: solo casa_join().
+drop policy if exists casa_houses_read on casa_houses;
+create policy casa_houses_read on casa_houses
   for select to authenticated using (casa_is_member(ns));
 
 -- Gastos / fijos / config: los miembros de la casa pueden todo.
@@ -203,6 +238,87 @@ create policy casa_settings_all on casa_settings
 
 
 -- ════════════════════════════════════════════════════════════════════
+-- 6 bis. ENTRAR A UNA CASA (lo que usa el botón "CREAR CUENTA" de la app)
+-- ────────────────────────────────────────────────────────────────────
+-- Cualquiera puede crearse un usuario desde la app. Este es el paso que
+-- lo mete en una casa:
+--
+--   · Si la casa NO existe → la crea, y el código que mandó queda como el
+--     código de esa casa. Quien la crea, la "funda".
+--   · Si la casa YA existe → exige el código correcto. Si no coincide,
+--     falla y no se ve nada.
+--
+-- Es `security definer` a propósito: necesita escribir en casa_houses y
+-- casa_members, donde el cliente no tiene permiso de escritura. Solo
+-- escribe la fila del usuario que la llama (auth.uid()); no acepta que le
+-- pasen un user_id.
+-- ════════════════════════════════════════════════════════════════════
+create or replace function public.casa_join(
+  p_ns    text,
+  p_code  text,
+  p_name  text,
+  p_color text default null
+)
+returns casa_members
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid   uuid := auth.uid();
+  v_ns    text := lower(btrim(coalesce(p_ns, '')));
+  v_code  text := btrim(coalesce(p_code, ''));
+  v_name  text := btrim(coalesce(p_name, ''));
+  v_house casa_houses;
+  v_row   casa_members;
+begin
+  if v_uid is null then
+    raise exception 'Hay que iniciar sesión antes de entrar a una casa.';
+  end if;
+  if char_length(v_ns) < 2 then
+    raise exception 'El nombre de la casa es muy corto.';
+  end if;
+  if char_length(v_code) < 4 then
+    raise exception 'El codigo de la casa tiene que tener al menos 4 caracteres.';
+  end if;
+  if char_length(v_name) < 1 then
+    raise exception 'Falta tu nombre.';
+  end if;
+
+  select * into v_house from casa_houses where ns = v_ns;
+
+  if v_house is null then
+    -- Primera persona: funda la casa con este código.
+    insert into casa_houses (ns, code, created_by) values (v_ns, v_code, v_uid)
+    on conflict (ns) do nothing
+    returning * into v_house;
+    -- Si dos se registran a la vez, el que perdió la carrera valida contra
+    -- la casa que quedó creada.
+    if v_house is null then
+      select * into v_house from casa_houses where ns = v_ns;
+    end if;
+  end if;
+
+  if v_house.code <> v_code then
+    raise exception 'El codigo de la casa no es correcto.';
+  end if;
+
+  insert into casa_members (user_id, ns, name, color)
+  values (v_uid, v_ns, v_name, coalesce(p_color, '#6b7280'))
+  on conflict (user_id) do update
+    set ns = excluded.ns, name = excluded.name,
+        color = coalesce(excluded.color, casa_members.color)
+  returning * into v_row;
+
+  return v_row;
+end;
+$$;
+
+revoke all on function public.casa_join(text, text, text, text) from public;
+grant execute on function public.casa_join(text, text, text, text) to authenticated;
+
+
+-- ════════════════════════════════════════════════════════════════════
 -- 7. REALTIME
 -- ────────────────────────────────────────────────────────────────────
 -- Sin esto, el gasto que carga una persona NO le aparece sola a la otra
@@ -213,6 +329,7 @@ begin
   begin execute 'alter publication supabase_realtime add table casa_expenses';  exception when duplicate_object then null; end;
   begin execute 'alter publication supabase_realtime add table casa_recurring'; exception when duplicate_object then null; end;
   begin execute 'alter publication supabase_realtime add table casa_settings';  exception when duplicate_object then null; end;
+  begin execute 'alter publication supabase_realtime add table casa_members';   exception when duplicate_object then null; end;
 end $$;
 
 -- Realtime respeta RLS, pero necesita ver la fila completa en los UPDATE
@@ -220,39 +337,40 @@ end $$;
 alter table casa_expenses  replica identity full;
 alter table casa_recurring replica identity full;
 alter table casa_settings  replica identity full;
+alter table casa_members   replica identity full;
 
 
 -- ════════════════════════════════════════════════════════════════════
--- 8. ALTA DE PERSONAS
+-- 8. ALTA DE PERSONAS — se hace SOLA, desde la app
 -- ────────────────────────────────────────────────────────────────────
--- 1) Dashboard → Authentication → Users → "Add user" → email + contraseña
---    (marcar "Auto Confirm User" para que no tenga que confirmar el mail).
--- 2) Copiar el UUID del usuario recién creado.
--- 3) Correr acá abajo el insert con ese UUID.
+-- No hay que dar de alta a nadie a mano. En la app:
+--
+--   1) Pantalla de entrada → pestaña "CREAR CUENTA".
+--   2) Nombre, email, contraseña, nombre de la casa y código de la casa.
+--   3) La primera persona FUNDA la casa: el código que escribe queda como
+--      el código de esa casa. Después lo ve en DATOS → ☁ Nube ("Código
+--      para invitar") y se lo pasa a quien quiera sumar.
+--   4) El resto entra con ese mismo nombre de casa + código.
+--
+-- Recomendado para que el alta sea inmediata: Dashboard → Authentication →
+-- Sign In / Providers → Email → apagar "Confirm email". Si queda prendido,
+-- la persona tiene que confirmar el mail antes de poder entrar (la app se
+-- lo avisa).
 --
 -- Para dar de baja a alguien: borrar el usuario en Authentication. El
 -- `on delete cascade` le borra la fila de casa_members y el teléfono queda
 -- sin acceso al instante (los gastos que cargó NO se borran).
--- ════════════════════════════════════════════════════════════════════
-
--- insert into casa_members (user_id, ns, name, color) values
---   ('00000000-0000-0000-0000-000000000000', 'casa', 'Julio',   '#f59e0b'),
---   ('11111111-1111-1111-1111-111111111111', 'casa', 'Javiera', '#ec4899')
--- on conflict (user_id) do update
---   set ns = excluded.ns, name = excluded.name, color = excluded.color;
-
--- Atajo: dar de alta por email, sin copiar UUIDs a mano.
--- (Correr DESPUÉS de crear los usuarios en Authentication → Users.)
 --
--- insert into casa_members (user_id, ns, name, color)
--- select u.id, 'casa', v.name, v.color
--- from auth.users u
--- join (values
---   ('julio@ejemplo.com',   'Julio',   '#f59e0b'),
---   ('javiera@ejemplo.com', 'Javiera', '#ec4899')
--- ) as v(email, name, color) on lower(u.email) = lower(v.email)
--- on conflict (user_id) do update
---   set ns = excluded.ns, name = excluded.name, color = excluded.color;
+-- Cambiar el código de una casa (si se filtró):
+--   update casa_houses set code = 'nuevo-codigo' where ns = 'casa';
+--
+-- Ver quién está en cada casa:
+--   select h.ns, h.code, m.name, u.email
+--   from casa_houses h
+--   left join casa_members m on m.ns = h.ns
+--   left join auth.users u on u.id = m.user_id
+--   order by h.ns, m.name;
+-- ════════════════════════════════════════════════════════════════════
 
 
 -- ════════════════════════════════════════════════════════════════════

@@ -1,7 +1,7 @@
 # CLAUDE.md — Gastos Casa
 
-> Mapa de arquitectura de **Gastos Casa**: la app de gastos compartidos del
-> hogar de Julio y Javiera. Misma filosofía que **StockMerger**
+> Mapa de arquitectura de **Gastos Casa**: app de gastos compartidos del
+> hogar. Misma filosofía que **StockMerger**
 > (`juliobarbol/stockmerger`): PWA de un solo archivo, local-first, nube
 > opcional, servida como assets estáticos en Cloudflare.
 
@@ -11,9 +11,10 @@ Una app para anotar los gastos de la casa desde el teléfono. Desde acá se:
 
 - **Cargan gastos** con un teclado numérico grande (monto → categoría → quién
   pagó → descripción/etiquetas opcionales).
-- Se lleva **quién gastó qué**: cada gasto queda a nombre de una persona
-  (Julio / Javiera) y el resumen dice cómo queda la cuenta si parten todo a
-  la mitad.
+- Se lleva **quién gastó qué**: cada gasto queda a nombre de una persona y el
+  resumen dice cómo queda la cuenta si parten todo a la mitad.
+- **Cada uno se crea su cuenta desde la app** (no hay personas quemadas en el
+  código ni altas a mano en el panel de Supabase).
 - Se ven el **historial** del mes (filtrable por persona, categoría y
   etiqueta) y un **resumen** con dona por categoría, evolución mensual,
   día más caro, día de la semana más caro, gastos hormiga y comparativa
@@ -48,7 +49,7 @@ de StockMerger, pero vale la misma disciplina: está limpio y modularizado
 3. Para **editar**: `Grep` el `old_string` único → `Read` solo esa franja →
    `Edit`. No vuelvas a leer el archivo después de editar (el harness ya
    valida el cambio).
-4. **CSS (`<style>` 26–404)** y **HTML/markup (406–806)** casi nunca hacen
+4. **CSS (`<style>` 26–408)** y **HTML/markup (410–829)** casi nunca hacen
    falta para lógica de negocio — no los leas salvo trabajo de estilos o
    maquetado.
 
@@ -57,9 +58,9 @@ de StockMerger, pero vale la misma disciplina: está limpio y modularizado
 | Región | Líneas |
 |---|---|
 | `<head>` + CDN + script de tema | 1–25 |
-| **CSS** (`<style>`) | 26–404 |
-| **HTML / markup** (gate, header, vistas, modales) | 406–806 |
-| **JS principal** (`<script>`) | 807–2637 |
+| **CSS** (`<style>`) | 26–408 |
+| **HTML / markup** (gate, header, vistas, modales) | 410–829 |
+| **JS principal** (`<script>`) | 830–2873 |
 
 ### Módulos internos (dentro del JS principal)
 
@@ -67,31 +68,31 @@ Cada módulo arranca con un banner `// XXX.JS — ...`. Saltá directo al rango:
 
 | Módulo | Líneas | Rol |
 |---|---|---|
-| `CONST.JS` | 822–860 | Categorías y personas por defecto, teclas, emojis/colores, claves de localStorage. |
-| `STORE.JS` | 861–867 | `load()` / `save()` sobre localStorage. Todo el volumen de datos es chico; no hace falta IndexedDB. |
-| `STATE.JS` | 868–903 | Estado global: `expenses`, `recurring`, `budgets`, `CATEGORIES`, `PEOPLE`, `meId`, config de nube. |
-| `UTILS.JS` | 904–947 | `uid()`, `fmt()`, `pkey()` (clave normalizada de persona), `liveExpenses()` (filtra lápidas), `escapeHtml()`. |
-| `MUTATE.JS` | 948–1012 | **Toda escritura pasa por acá**: marca `updatedAt` + `_dirty` y dispara el push a la nube. Incluye borrado lógico, purga de lápidas y migración de datos viejos. |
-| `PEOPLE.JS` | 1013–1132 | Quién es quién: chip de usuario, selector "PAGÓ", modal "¿quién soy?", alta/baja de personas. |
-| `UI.JS` | 1133–1262 | Piezas compartidas: confirm propio, navegación entre vistas, display del monto, grilla de categorías, teclado, punto de sincronización. |
-| `TAGS.JS` | 1263–1305 | Etiquetas libres por gasto (máx. 5). |
-| `HOME.JS` | 1306–1360 | Pantalla de alta de gastos. |
-| `HISTORIAL.JS` | 1361–1473 | Lista del mes + filtros (persona / categoría / etiqueta) + swipe para borrar. |
-| `EDIT.JS` | 1474–1512 | Modal de edición de un gasto (incluye cambiar quién pagó). |
-| `DONUT.JS` | 1513–1612 | Dona de distribución por categoría, en SVG a mano (sin librerías de charts). |
-| `WHO.JS` | 1613–1677 | **Quién gastó**: totales por persona y balance "si parten todo a la mitad". |
-| `RESUMEN.JS` | 1678–1865 | Números del mes, evolución, día más caro, día de la semana, gastos hormiga, comparativa mes anterior, barras por categoría. |
-| `RECUR.JS` | 1866–1941 | Gastos fijos mensuales y "aplicar al mes". |
-| `BUDGET.JS` | 1942–1968 | Límite mensual por categoría. |
-| `CATS.JS` | 1969–2069 | Administrador de categorías (nombre, emoji, color, esencial). |
-| `DATA.JS` | 2070–2148 | Exportar CSV / backup JSON, importar, borrar todo. |
-| `SUPABASE.JS` | 2149–2260 | Conexión **opcional** con la nube: config, login/logout, sesión, `pullMembers()`. |
-| `SYNC.JS` | 2261–2439 | Motor de sincronización: push de lo sucio, pull incremental, merge last-write-wins. |
-| `REALTIME.JS` | 2440–2470 | Suscripción a `postgres_changes`: el gasto que carga el otro aparece solo. |
-| `GATE.JS` | 2471–2501 | Pantalla de login que tapa la app cuando la nube está configurada. |
-| `NUBE_UI.JS` | 2502–2579 | Sección ☁ NUBE COMPARTIDA de la pestaña DATOS. |
-| `THEME.JS` | 2580–2596 | Tema claro / oscuro. |
-| `BOOT.JS` | 2597–2636 | Arranque, listeners de re-sync y registro del service worker. |
+| `CONST.JS` | 845–881 | Categorías y personas por defecto, teclas, emojis/colores, claves de localStorage. |
+| `STORE.JS` | 882–888 | `load()` / `save()` sobre localStorage. Todo el volumen de datos es chico; no hace falta IndexedDB. |
+| `STATE.JS` | 889–924 | Estado global: `expenses`, `recurring`, `budgets`, `CATEGORIES`, `PEOPLE`, `meId`, config de nube. |
+| `UTILS.JS` | 925–968 | `uid()`, `fmt()`, `pkey()` (clave normalizada de persona), `liveExpenses()` (filtra lápidas), `escapeHtml()`. |
+| `MUTATE.JS` | 969–1033 | **Toda escritura pasa por acá**: marca `updatedAt` + `_dirty` y dispara el push a la nube. Incluye borrado lógico, purga de lápidas y migración de datos viejos. |
+| `PEOPLE.JS` | 1034–1173 | Quién es quién: chip de usuario, selector "PAGÓ", modal "¿quién soy?", alta/baja de personas. **No hay personas precargadas.** |
+| `UI.JS` | 1174–1303 | Piezas compartidas: confirm propio, navegación entre vistas, display del monto, grilla de categorías, teclado, punto de sincronización. |
+| `TAGS.JS` | 1304–1346 | Etiquetas libres por gasto (máx. 5). |
+| `HOME.JS` | 1347–1401 | Pantalla de alta de gastos. |
+| `HISTORIAL.JS` | 1402–1514 | Lista del mes + filtros (persona / categoría / etiqueta) + swipe para borrar. |
+| `EDIT.JS` | 1515–1553 | Modal de edición de un gasto (incluye cambiar quién pagó). |
+| `DONUT.JS` | 1554–1653 | Dona de distribución por categoría, en SVG a mano (sin librerías de charts). |
+| `WHO.JS` | 1654–1718 | **Quién gastó**: totales por persona y balance "si parten todo a la mitad". |
+| `RESUMEN.JS` | 1719–1906 | Números del mes, evolución, día más caro, día de la semana, gastos hormiga, comparativa mes anterior, barras por categoría. |
+| `RECUR.JS` | 1907–1982 | Gastos fijos mensuales y "aplicar al mes". |
+| `BUDGET.JS` | 1983–2009 | Límite mensual por categoría. |
+| `CATS.JS` | 2010–2110 | Administrador de categorías (nombre, emoji, color, esencial). |
+| `DATA.JS` | 2111–2189 | Exportar CSV / backup JSON, importar, borrar todo. |
+| `SUPABASE.JS` | 2190–2392 | Conexión **opcional** con la nube: config, login, **alta de cuenta (`sbSignUp`)**, `casaJoin()`, sesión, `pullMembers()` / `pullCasa()`. |
+| `SYNC.JS` | 2393–2571 | Motor de sincronización: push de lo sucio, pull incremental, merge last-write-wins. |
+| `REALTIME.JS` | 2572–2605 | Suscripción a `postgres_changes` (gastos, fijos, config y **personas**): lo que carga el otro aparece solo. |
+| `GATE.JS` | 2606–2736 | Pantalla de entrada con 3 modos: `login` / `signup` / `join`. Tapa la app cuando la nube está configurada. |
+| `NUBE_UI.JS` | 2737–2815 | Sección ☁ NUBE COMPARTIDA de la pestaña DATOS. |
+| `THEME.JS` | 2816–2832 | Tema claro / oscuro. |
+| `BOOT.JS` | 2833–2873 | Arranque, listeners de re-sync y registro del service worker. |
 
 > Los rangos se mueven al editar. Si algo no cuadra, reubicá con
 > `Grep -n "^// NOMBRE.JS"` y leé el banner.
@@ -122,8 +123,10 @@ Cada módulo arranca con un banner `// XXX.JS — ...`. Saltá directo al rango:
 Config en `localStorage['gastos_sb_config'] = { url, anonKey, ns }`:
 
 - `url` / `anonKey`: del proyecto Supabase.
-- **`ns`** = la CASA. **Es la clave que une los dos teléfonos**: ambos tienen
-  que usar el mismo `ns` para verse los gastos. Por defecto `casa`.
+- **`ns`** = la CASA. **Es la clave que une los teléfonos**: todos tienen que
+  usar el mismo `ns` para verse los gastos. Por defecto `casa`.
+- El `ns` se elige/confirma en el gate al crear la cuenta y se guarda acá
+  (`guardarCasaElegida()`).
 
 Cliente creado con `supabase.createClient(url, anonKey, { auth: {
 persistSession, autoRefreshToken, storageKey: 'gastos-auth' } })` — ver
@@ -137,30 +140,70 @@ Supabase Auth (email + contraseña) y una fila en `casa_members` con su casa
 helper `casa_is_member(ns)`; sin sesión iniciada (`auth.uid()` null) no se ve
 ni se toca nada.
 
-- **Gate de login al abrir** (`#auth-gate`, `gateRefresh()`): si la nube está
-  configurada y no hay sesión, una pantalla tapa la app hasta iniciar sesión.
-  No aparece en modo sin nube. Tiene dos escapes: "Configurar conexión" (va a
-  DATOS) y "Usar sin nube (solo este teléfono)" — ambos marcan
-  `gastos_sb_skip`, que se limpia solo al volver a iniciar sesión.
-- **Identidad**: con sesión iniciada, quién soy lo define `casa_members` (el
-  chip del header queda fijo y el selector "PAGÓ" del alta queda bloqueado en
-  mi nombre). Sin nube, se elige a mano tocando el chip del header.
-- **Alta/baja de personas**: crear/borrar el usuario en Supabase Auth y su
-  fila en `casa_members`. El `on delete cascade` borra la membresía al borrar
-  el usuario → el teléfono queda sin acceso al instante (los gastos que cargó
-  NO se borran). SQL de ejemplo en `schema.sql`, sección 8.
+#### Alta de cuenta: la hace el usuario, no el admin
+
+**No hay personas precargadas ni altas a mano.** Cualquiera abre la app y se
+crea su cuenta desde el gate (pestaña CREAR CUENTA): nombre, email,
+contraseña, nombre de la casa y **código de la casa**.
+
+- `sbSignUp()` → `auth.signUp()`. Si el proyecto pide confirmar el mail, la
+  sesión viene en `null`: la app lo avisa y lo manda a ENTRAR.
+- `casaJoin()` → RPC **`casa_join(p_ns, p_code, p_name, p_color)`**, que es
+  `security definer` porque escribe en tablas donde el cliente no tiene
+  permiso. Solo escribe la fila de `auth.uid()`; no acepta un user_id ajeno.
+  - Si la casa **no existe**, la crea y el código que mandó queda como el
+    código de esa casa (el primero la funda).
+  - Si la casa **ya existe**, exige el código exacto. Si no coincide, falla y
+    la persona no ve nada.
+- El código se ve en DATOS → ☁ Nube ("Código para invitar", `pullCasa()`),
+  solo para quienes ya son miembros — lo garantiza la RLS de `casa_houses`.
+
+> ⚠️ **El código es lo único que separa una casa de los curiosos.** Sin él,
+> cualquiera que abra la app y tipee el nombre de la casa vería los gastos del
+> hogar. Si se filtra: `update casa_houses set code = '...' where ns = '...'`
+> (los que ya son miembros no se ven afectados; el código solo se pide al
+> entrar por primera vez).
+
+#### Los tres modos del gate (`GATE.JS`)
+
+| Modo | Cuándo | Campos |
+|---|---|---|
+| `login`  | Por defecto | email + contraseña |
+| `signup` | Pestaña CREAR CUENTA | nombre, email, contraseña, casa, código |
+| `join`   | Hay sesión pero **no** es miembro de la casa | nombre, casa, código |
+
+El modo `join` es la red de seguridad: le pasa a quien confirmó el mail y
+volvió a entrar, y a quien se creó la cuenta pero puso mal el código (la
+cuenta ya existe, así que reintentar el alta daría "user already registered"
+— por eso se reintenta solo el `casa_join`).
+
+- **Gate al abrir** (`#auth-gate`, `gateRefresh()`): si la nube está
+  configurada y no hay sesión (o la hay pero falta unirse a la casa), una
+  pantalla tapa la app. No aparece en modo sin nube. Tiene dos escapes:
+  "Configurar conexión" (va a DATOS) y "Usar sin nube (solo este teléfono)" —
+  ambos marcan `gastos_sb_skip`, que se limpia al volver a entrar.
+- **Identidad**: con sesión iniciada, quién soy lo define `casa_members`
+  (`aplicarIdentidad()`): el chip del header queda fijo y el selector "PAGÓ"
+  del alta queda bloqueado en mi nombre. Sin nube, se elige a mano tocando el
+  chip del header (y la primera persona se crea desde el propio selector
+  "PAGÓ", que arranca en "+ ¿Quién sos?").
+- **Baja de personas**: borrar el usuario en Supabase Auth. El
+  `on delete cascade` borra la membresía → el teléfono queda sin acceso al
+  instante (los gastos que cargó NO se borran).
 
 ### Tablas
 
 | Tabla | Uso desde la app |
 |---|---|
-| `casa_members` | **Lee**. Quién es quién en la casa (nombre + color + user_id). El alta se hace en el panel de Supabase, no desde la app. |
+| `casa_houses` | **Lee** el código de la casa (para poder invitar). Solo escribe `casa_join()`. |
+| `casa_members` | **Lee** (pull + Realtime). Quién es quién en la casa. El alta la hace `casa_join()` cuando la persona se registra; cada uno puede editar solo SU fila. |
 | `casa_expenses` | **Lee y escribe** (upsert por `(ns, id)`). Una fila por gasto. |
 | `casa_recurring` | **Lee y escribe**. Una fila por gasto fijo. |
 | `casa_settings` | **Lee y escribe**. Config compartida: `categories`, `budgets`, `people` (una fila por clave). |
 
 Realtime: se suscribe a `postgres_changes` (`event: "*"`) en las tres tablas
-de datos, filtrando por `ns`.
+de datos **y en `casa_members`** (para que quien se acaba de registrar
+aparezca al instante en el teléfono del otro), filtrando por `ns`.
 
 ### Cómo sincroniza (`SYNC.JS`)
 
@@ -212,11 +255,17 @@ Reglas del motor, que hay que respetar si se toca:
   quien tiene la sesión iniciada (no se puede falsear desde el alta); sin
   nube, se elige a mano en el selector "PAGÓ". El botón de registrar queda
   deshabilitado hasta que haya persona elegida.
-- **La lista de personas es de la casa, no del teléfono.** Viaja por
-  `casa_settings/people`; las que tienen usuario propio llegan además por
-  `casa_members` (que manda para el color y el `user_id`). El cruce
-  persona↔gasto es **por nombre normalizado** (`pkey()`), igual que en
-  StockMerger con los clientes.
+- **Nadie viene precargado.** `DEFAULT_PEOPLE` está vacío a propósito: la app
+  es genérica, no la de dos personas concretas. Cada uno se crea su cuenta
+  desde el gate; sin nube, se crea a sí mismo desde el selector "PAGÓ".
+  **No volver a quemar nombres en el código.**
+- **Cualquiera puede registrarse, pero no en cualquier casa.** El alta es
+  libre; entrar a una casa existente pide su código. La primera persona que
+  usa un nombre de casa la funda y define el código.
+- **La lista de personas es de la casa, no del teléfono.** Con nube, manda
+  `casa_members`. También viaja por `casa_settings/people` para el modo sin
+  nube. El cruce persona↔gasto es **por nombre normalizado** (`pkey()`),
+  igual que en StockMerger con los clientes.
 - **Borrar una persona no borra sus gastos.** Solo deja de aparecer para
   elegir; el histórico se conserva a su nombre.
 - **El balance del resumen es informativo**, no un libro de cuentas: asume
@@ -235,7 +284,8 @@ Reglas del motor, que hay que respetar si se toca:
 
 - **PENDIENTE / ideas**: registrar pagos entre personas (saldar la cuenta del
   mes), gastos divididos en porcentajes distintos a 50/50, notificación push
-  cuando el otro carga un gasto grande.
+  cuando el otro carga un gasto grande, poder cambiar el código de la casa
+  desde la app (hoy es un `update` a mano en Supabase).
 - Para cambios en el shape de los datos, acordate de la **migración**
   (`migrateLegacy()`): hay backups viejos de la app original (v8) sin
   `author`, sin `updatedAt` y con `id` numérico.
