@@ -12,7 +12,7 @@
 // teléfonos reciben la última versión sin bump manual.
 // ════════════════════════════════════════════════════════════════════
 
-const CACHE = 'gastoscasa-20260728-225554';
+const CACHE = 'gastoscasa-20260729-001437';
 
 // Recursos propios (mismo origen) — se precachean al instalar.
 const PRECACHE = [

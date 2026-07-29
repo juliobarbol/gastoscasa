@@ -52,7 +52,7 @@
     }
 
     html,body { height:100%; background:var(--bg); color:var(--text); font-family:var(--font); overscroll-behavior:none; transition:background .2s,color .2s; }
-    #app { max-width:480px; margin:0 auto; min-height:100dvh; display:flex; flex-direction:column; position:relative; }
+    #app { max-width:480px; margin:0 auto; height:100dvh; display:flex; flex-direction:column; position:relative; }
 
     /* HEADER */
     .header { display:flex; justify-content:space-between; align-items:center; padding:8px 14px; border-bottom:1px solid var(--border); flex-shrink:0; gap:8px; }
@@ -80,16 +80,23 @@
     .nav-btn.active { color:var(--gold); border-bottom-color:var(--gold); }
 
     /* VIEWS */
-    .view { display:none; flex:1; padding:12px 12px 80px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+    .view { display:none; flex:1; min-height:0; padding:12px 12px 80px; overflow-y:auto; -webkit-overflow-scrolling:touch; }
     .view.active { display:flex; flex-direction:column; }
-    #view-home { overflow:hidden; padding-bottom:56px; }
+    /* La pantalla de alta llena el alto disponible: lo que sobra se lo queda
+       el teclado (teclas más altas = más fáciles de pegarle). En pantallas
+       cortas las teclas tienen un piso y la vista scrollea, en vez de
+       recortarse. */
+    /* min-height:0 es lo que deja que la vista se ACHIQUE y scrollee sola en
+       pantallas cortas. Sin eso crece y empuja al #app más allá del alto de
+       la pantalla, y el botón de registrar termina tapado por la barra fija. */
+    #view-home { overflow-y:auto; padding-bottom:56px; min-height:0; }
 
     /* DISPLAY */
     .display { background:var(--bg2); border:1px solid var(--border); padding:7px 14px; margin-bottom:7px; flex-shrink:0; }
     .display-label { font-size:8px; letter-spacing:.2em; color:var(--text-mute); margin-bottom:2px; }
     .display-amount { display:flex; align-items:baseline; gap:3px; line-height:1; }
-    .display-currency { font-size:15px; font-weight:700; color:var(--gold); }
-    .display-digits { font-size:30px; font-weight:700; color:var(--gold); letter-spacing:.04em; font-variant-numeric:tabular-nums; }
+    .display-currency { font-size:18px; font-weight:700; color:var(--gold); }
+    .display-digits { font-size:38px; font-weight:700; color:var(--gold); letter-spacing:.04em; font-variant-numeric:tabular-nums; }
     .display-digits.is-empty { color:var(--text-dead); }
     .display-cursor { font-size:26px; color:var(--gold); font-weight:200; animation:blink 1s infinite; margin-left:1px; align-self:flex-end; margin-bottom:1px; line-height:1; }
     /* OJO: el alto del display NO puede cambiar mientras se tipea. Si cambia,
@@ -105,10 +112,10 @@
     /* CAT ROW */
     .cat-row { display:flex; gap:5px; margin-bottom:6px; flex-shrink:0; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; padding-bottom:2px; }
     .cat-row::-webkit-scrollbar { display:none; }
-    .cat-btn { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:5px 8px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:2px; transition:all .15s; color:inherit; flex-shrink:0; min-width:50px; }
+    .cat-btn { background:var(--bg3); border:1px solid var(--border); border-radius:6px; padding:7px 9px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; transition:all .15s; color:inherit; flex-shrink:0; min-width:58px; }
     .cat-btn:active { transform:scale(.95); }
-    .cat-emoji { font-size:18px; line-height:1; }
-    .cat-label { font-family:var(--font); font-size:8px; letter-spacing:.04em; font-weight:500; color:#555; white-space:nowrap; }
+    .cat-emoji { font-size:23px; line-height:1; }
+    .cat-label { font-family:var(--font); font-size:9px; letter-spacing:.04em; font-weight:500; color:#555; white-space:nowrap; }
 
     /* NOTE */
     .note-input { width:100%; background:var(--bg2); border:1px solid var(--border); border-top:none; color:var(--text-dim); font-family:var(--font); font-size:11px; padding:5px 12px; outline:none; margin-bottom:6px; letter-spacing:.05em; flex-shrink:0; }
@@ -131,14 +138,17 @@
     .switch.on::after { transform:translateX(14px); }
 
     /* KEYPAD */
-    .keypad { display:flex; flex-direction:column; gap:4px; flex-shrink:0; }
-    .key-row { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
-    .key { background:var(--bg3); border:1px solid var(--border); color:var(--text-dim); box-shadow:var(--shadow-key); font-family:var(--font); font-size:18px; font-weight:500; padding:9px 0; cursor:pointer; border-radius:4px; transition:background .1s,transform .1s; user-select:none; }
+    .keypad { display:flex; flex-direction:column; gap:6px; flex:1 1 auto; }
+    .key-row { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; flex:1 1 0; min-height:46px; }
+    .key { background:var(--bg3); border:1px solid var(--border); color:var(--text-dim); box-shadow:var(--shadow-key); font-family:var(--font); font-size:24px; font-weight:500; padding:0; cursor:pointer; border-radius:6px; transition:background .1s,transform .1s; user-select:none; display:flex; align-items:center; justify-content:center; }
     .key:active { transform:scale(.93); background:var(--border2); }
-    .key.del { color:var(--gold); font-size:14px; }
+    .key.del { color:var(--gold); font-size:19px; }
 
     /* ADD BUTTON */
-    .add-btn { background:var(--gold); border:none; color:#000; font-family:var(--font); font-size:12px; font-weight:700; letter-spacing:.15em; padding:11px; cursor:pointer; border-radius:4px; width:100%; margin-top:4px; transition:opacity .2s; flex-shrink:0; }
+    .modal .keypad { flex:0 0 auto; }
+    .modal .key-row { flex:0 0 auto; min-height:0; }
+    .modal .key { padding:9px 0; font-size:20px; }
+    .add-btn { background:var(--gold); border:none; color:#000; font-family:var(--font); font-size:13px; font-weight:700; letter-spacing:.15em; padding:15px; cursor:pointer; border-radius:6px; width:100%; margin-top:6px; transition:opacity .2s; flex-shrink:0; }
     .add-btn:disabled { opacity:.3; cursor:default; }
     .add-btn.green { background:var(--green); color:#fff; }
     .add-btn.purple { background:#8b5cf6; color:#fff; }
