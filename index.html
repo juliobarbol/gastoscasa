@@ -285,7 +285,12 @@
     .recur-amount { font-size:14px; font-weight:700; color:#8b5cf6; }
 
     /* BUDGET VIEW */
-    .budget-input-row { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--border); }
+    /* Cada fila la cierra su renglón .budget-spent, así que la línea
+       divisoria vive ahí y no acá (si no, salen dos). */
+    .budget-input-row { display:flex; align-items:center; gap:8px; padding:10px 0 4px; }
+    .proj-line { font-size:9px; letter-spacing:.08em; color:var(--text-mute); text-align:right; margin:-6px 0 12px; }
+    .budget-spent { font-size:9px; letter-spacing:.06em; color:var(--text-mute); padding:0 0 9px 26px; border-bottom:1px solid var(--border); }
+    .budget-total-row + .budget-spent { border-bottom:2px solid var(--border2); padding-bottom:13px; margin-bottom:6px; }
     .budget-cat-info { display:flex; align-items:center; gap:8px; flex:1; }
     .budget-cat-emoji { font-size:18px; }
     .budget-cat-label { font-size:11px; color:var(--text-dim); }
@@ -646,6 +651,7 @@
       <span class="total-label">TOTAL ESTE MES</span>
       <span class="total-amount" id="resumen-total">$0</span>
     </div>
+    <div class="proj-line" id="resumen-proj" style="display:none"></div>
     <div class="section-title"><span>POR CATEGORÍA</span></div>
     <div id="cat-bars"></div>
     <div id="month-history"></div>
@@ -663,7 +669,7 @@
 
   <!-- VIEW: PRESUPUESTO -->
   <div id="view-presupuesto" class="view">
-    <div class="section-title"><span>LÍMITE MENSUAL POR CATEGORÍA</span></div>
+    <div class="section-title"><span>LÍMITES DEL MES</span></div>
     <div id="budget-list"></div>
     <button class="add-btn green" id="save-budget-btn" style="margin-top:16px">GUARDAR LÍMITES</button>
   </div>
@@ -929,6 +935,10 @@ const KEYS = [["7","8","9"],["4","5","6"],["1","2","3"],["000","0","⌫"]];
 const EMOJI_OPTIONS = ["🍽️","🍕","🍔","🥗","☕","🍺","🛒","🚌","🚗","🏠","💊","💡","🎬","👕","📦","🐶","🐱","🎮","✈️","🏋️","💇","💅","📚","🎓","💼","🖥️","📱","🎵","🎨","🏖️","⛽","🔧","💒","👶","🎁","🌿","🏥","💳","🪴","🧹"];
 const COLOR_OPTIONS = ["#f59e0b","#f97316","#ef4444","#ec4899","#8b5cf6","#3b82f6","#06b6d4","#10b981","#84cc16","#6b7280","#a16207","#b45309","#be185d","#7c3aed","#1d4ed8","#0e7490","#065f46","#4d7c0f","#374151","#9f1239"];
 
+// Clave reservada dentro de `budgets` para el límite del mes entero. No puede
+// chocar con una categoría: las categorías tienen id "cat_<uid>".
+const TOTAL_BUDGET_KEY = "__mes";
+
 // Nube
 const SB_CFG_KEY   = "gastos_sb_config";   // { url, anonKey, ns }
 const SB_AUTH_KEY  = "gastos-auth";        // storageKey de la sesión de Supabase
@@ -1029,6 +1039,23 @@ const monthlyEx = () => liveExpenses().filter(e => e.month === viewMonth);
 const totalMonth = () => monthlyEx().reduce((s,e) => s + e.amount, 0);
 const essTotal   = () => { const ess = getESSENTIAL(); return monthlyEx().filter(e => ess.includes(e.category)).reduce((s,e) => s + e.amount, 0); };
 const monthsWithData = () => [...new Set(liveExpenses().map(e => e.month))].filter(Boolean).sort();
+
+// Totales de un mes cualquiera (no del que se está mirando): los usan los
+// avisos de límite, que corren sobre el mes del gasto recién cargado.
+const monthTotalOf   = m => liveExpenses().filter(e => e.month === m).reduce((s,e) => s + e.amount, 0);
+const monthCatTotal  = (m,c) => liveExpenses().filter(e => e.month === m && e.category === c).reduce((s,e) => s + e.amount, 0);
+
+// Proyección a fin de mes al ritmo actual. Solo tiene sentido en el mes en
+// curso y con unos días encima: con dos días de datos es puro ruido.
+function proyectarMes(total) {
+  if (viewMonth !== currentMonth) return null;
+  const hoy = new Date().getDate();
+  if (hoy < 5 || total <= 0) return null;
+  const [yr,mo] = viewMonth.split("-").map(Number);
+  const dias = new Date(yr, mo, 0).getDate();
+  if (hoy >= dias) return null;
+  return Math.round(total / hoy * dias);
+}
 
 function monthLabel(m) {
   const [yr,mo] = m.split("-");
@@ -1556,6 +1583,26 @@ function refreshNoteSuggestions() {
 }
 refreshNoteSuggestions();
 
+// Avisa solo cuando ESTE gasto cruza el umbral (80% o 100% del límite). Si
+// avisáramos siempre que estás pasado, tirarías el cartel en cada gasto del
+// resto del mes y dejarías de mirarlo.
+function avisarLimite(exp) {
+  const avisos = [];
+  const chequear = (label, limite, despues) => {
+    if (!limite || !despues) return;
+    const antes = despues - exp.amount;
+    if (antes < limite && despues >= limite)
+      avisos.push(`Pasaste el límite de ${label}: ${fmt(despues)} de ${fmt(limite)}.`);
+    else if (antes / limite < .8 && despues / limite >= .8)
+      avisos.push(`Vas en ${Math.round(despues / limite * 100)}% del límite de ${label} (${fmt(despues)} de ${fmt(limite)}).`);
+  };
+  chequear(catById(exp.category).label, budgets[exp.category], monthCatTotal(exp.month, exp.category));
+  chequear("todo el mes", budgets[TOTAL_BUDGET_KEY], monthTotalOf(exp.month));
+  if (!avisos.length) return;
+  // Con delay para que no pise la animación verde de "gasto registrado".
+  setTimeout(() => showConfirm("Ojo con el límite", avisos.join(" "), "Entendido", () => {}, false), 350);
+}
+
 // Repetir un gasto del historial: precarga el alta con lo mismo. La fecha
 // queda como esté el chip y quién paga sigue siendo el actual (el que repite
 // es el que está pagando ahora).
@@ -1623,6 +1670,7 @@ $("add-btn").addEventListener("click", () => {
   // pasado), mostramos ese mes: si no, el total de abajo no se mueve y
   // parece que no se guardó nada.
   if (exp.month !== viewMonth) setViewMonth(exp.month);
+  avisarLimite(exp);
 
   // `homeDate` NO se resetea a propósito: si estás cargando gastos de otro
   // día, van varios seguidos. El chip queda en dorado para que se note.
@@ -2138,6 +2186,22 @@ function renderResumen() {
     ctd.className = "comp-delta " + (totalDelta > 0 ? "up" : totalDelta < 0 ? "down" : "same");
   } else compEl.style.display = "none";
 
+  // Proyección de cierre del mes y cómo queda contra el límite del mes entero.
+  const projEl = $("resumen-proj");
+  const proj = proyectarMes(total);
+  const limiteMes = budgets[TOTAL_BUDGET_KEY];
+  if (proj) {
+    let txt = `al ritmo actual cerrás el mes en ${fmt(proj)}`;
+    if (limiteMes) txt += proj > limiteMes ? ` · ${fmt(proj - limiteMes)} sobre el límite` : ` · dentro del límite de ${fmt(limiteMes)}`;
+    projEl.textContent = txt;
+    projEl.style.color = (limiteMes && proj > limiteMes) ? "var(--red)" : "var(--text-mute)";
+    projEl.style.display = "block";
+  } else if (limiteMes && total > 0) {
+    projEl.textContent = `${Math.round(total / limiteMes * 100)}% del límite del mes (${fmt(limiteMes)})`;
+    projEl.style.color = total > limiteMes ? "var(--red)" : "var(--text-mute)";
+    projEl.style.display = "block";
+  } else projEl.style.display = "none";
+
   // Barras por categoría, con límite si está definido
   const barsEl = $("cat-bars"); barsEl.innerHTML = "";
   const byCat = CATEGORIES.map(cat => ({
@@ -2148,6 +2212,7 @@ function renderResumen() {
   else byCat.forEach(cat => {
     const pct = total > 0 ? (cat.total/total)*100 : 0;
     const budget = budgets[cat.id];
+    const catProj = proyectarMes(cat.total);
     const overBudget = budget && cat.total > budget;
     const budgetPct = budget ? Math.min((cat.total/budget)*100, 100) : pct;
     const barColor = overBudget ? "var(--red)" : cat.color;
@@ -2162,7 +2227,9 @@ function renderResumen() {
       </div>
       <div class="bar-pct">
         <span style="color:${barColor}99">${Math.round(pct)}% del total</span>
-        ${budget ? `<span style="color:var(--text-mute)">${Math.round(budgetPct)}% del límite</span>` : ""}
+        ${budget ? `<span style="color:${catProj && catProj > budget ? "var(--red)" : "var(--text-mute)"}">${
+            catProj ? `proyección ${fmt(catProj)} / ${fmt(budget)}` : `${Math.round(budgetPct)}% del límite`
+          }</span>` : ""}
       </div>`;
     barsEl.appendChild(div);
   });
@@ -2273,6 +2340,19 @@ $("save-recur-btn").addEventListener("click", () => {
 // ════════════════════════════════════════════════════════════════════
 function renderPresupuesto() {
   const list = $("budget-list"); list.innerHTML = "";
+
+  // Fila del límite del mes entero, arriba y aparte de las categorías.
+  const totalRow = document.createElement("div");
+  totalRow.className = "budget-input-row budget-total-row";
+  totalRow.innerHTML = `
+    <div class="budget-cat-info">
+      <span class="budget-cat-emoji">🎯</span>
+      <span class="budget-cat-label" style="color:var(--gold)">Todo el mes</span>
+    </div>
+    <input class="budget-amount-input" type="number" data-cat="${TOTAL_BUDGET_KEY}" placeholder="Sin límite" value="${budgets[TOTAL_BUDGET_KEY] || ""}" min="0"/>`;
+  list.appendChild(totalRow);
+  list.appendChild(budgetSpentLine(monthTotalOf(viewMonth), budgets[TOTAL_BUDGET_KEY]));
+
   CATEGORIES.forEach(cat => {
     const row = document.createElement("div"); row.className = "budget-input-row";
     row.innerHTML = `
@@ -2282,7 +2362,22 @@ function renderPresupuesto() {
       </div>
       <input class="budget-amount-input" type="number" data-cat="${cat.id}" placeholder="Sin límite" value="${budgets[cat.id] || ""}" min="0"/>`;
     list.appendChild(row);
+    list.appendChild(budgetSpentLine(monthCatTotal(viewMonth, cat.id), budgets[cat.id]));
   });
+}
+
+// Renglón "llevás X de Y" bajo cada límite, para no tener que ir al resumen
+// a saber cómo viene la mano.
+function budgetSpentLine(gastado, limite) {
+  const el = document.createElement("div");
+  el.className = "budget-spent";
+  if (!gastado && !limite) { el.textContent = ""; return el; }
+  if (!limite) { el.textContent = `llevás ${fmt(gastado)} este mes`; return el; }
+  const pct = Math.round((gastado / limite) * 100);
+  el.textContent = `llevás ${fmt(gastado)} · ${pct}% del límite`;
+  if (pct >= 100) el.style.color = "var(--red)";
+  else if (pct >= 80) el.style.color = "var(--gold)";
+  return el;
 }
 $("save-budget-btn").addEventListener("click", () => {
   document.querySelectorAll(".budget-amount-input").forEach(inp => {
@@ -2387,7 +2482,7 @@ $("modal-cat").addEventListener("click", e => { if (e.target === $("modal-cat"))
 $("new-cat-btn").addEventListener("click", () => openCatEditor(null));
 
 function rebuildAllCatGrids() {
-  buildCatGrid("cat-grid-home",  () => homeCat,  id => { homeCat = id; updateAddBtn(); });
+  buildCatGrid("cat-grid-home",  () => homeCat,  id => { homeCat = id; updateAddBtn(); refreshNoteSuggestions(); });
   buildCatGrid("cat-grid-edit",  () => editCat,  id => { editCat = id; updateSaveEditBtn(); });
   buildCatGrid("cat-grid-recur", () => recurCat, id => { recurCat = id; updateSaveRecurBtn(); });
   if (currentView === "presupuesto") renderPresupuesto();
