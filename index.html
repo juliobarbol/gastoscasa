@@ -305,6 +305,13 @@
     .recur-meta-field span { font-size:8px; letter-spacing:.12em; color:var(--text-mute); white-space:nowrap; }
     .recur-meta-field input { flex:1; min-width:0; background:none; border:none; color:var(--text); font-family:var(--font); font-size:12px; font-weight:700; text-align:right; outline:none; }
     .cuota-badge { font-size:8px; letter-spacing:.08em; color:#8b5cf6; border:1px solid #8b5cf655; background:#8b5cf614; padding:1px 5px; border-radius:3px; margin-left:4px; }
+
+    /* TOTALES POR ETIQUETA */
+    .tag-total-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); cursor:pointer; }
+    .tag-total-row:last-child { border-bottom:none; }
+    .tag-total-name { flex:1; font-size:11px; color:#3b82f6; }
+    .tag-total-sub { font-size:9px; color:var(--text-mute); margin-top:2px; }
+    .tag-total-amount { font-size:13px; font-weight:700; color:var(--text); }
     .budget-spent { font-size:9px; letter-spacing:.06em; color:var(--text-mute); padding:0 0 9px 26px; border-bottom:1px solid var(--border); }
     .budget-total-row + .budget-spent { border-bottom:2px solid var(--border2); padding-bottom:13px; margin-bottom:6px; }
     .budget-cat-info { display:flex; align-items:center; gap:8px; flex:1; }
@@ -647,6 +654,10 @@
     <div class="analysis-block" id="analysis-hormiga">
       <div class="analysis-title">GASTOS HORMIGA</div>
       <div id="hormiga-list"></div>
+    </div>
+    <div class="analysis-block" id="analysis-tags" style="display:none">
+      <div class="analysis-title">POR ETIQUETA</div>
+      <div id="tag-totals"></div>
     </div>
     <div class="analysis-block" id="analysis-comp" style="display:none">
       <div class="analysis-title">ESTE MES VS MES ANTERIOR</div>
@@ -2339,6 +2350,32 @@ function renderResumen() {
     });
   }
   $("analysis-hormiga").style.display = mex.length ? "block" : "none";
+
+  // Totales por etiqueta. Además del mes se muestra el acumulado histórico:
+  // una etiqueta como #vacaciones cruza meses, y ahí el número que importa
+  // es cuánto llevás en total.
+  const tagEl = $("tag-totals"); tagEl.innerHTML = "";
+  const porTag = new Map();
+  mex.forEach(e => (e.tags||[]).forEach(t => {
+    const g = porTag.get(t) || { mes:0, count:0, hist:0 };
+    g.mes += e.amount; g.count++; porTag.set(t, g);
+  }));
+  all.forEach(e => (e.tags||[]).forEach(t => { if (porTag.has(t)) porTag.get(t).hist += e.amount; }));
+  const tagRows = [...porTag.entries()].sort((a,b) => b[1].mes - a[1].mes);
+  $("analysis-tags").style.display = tagRows.length ? "block" : "none";
+  tagRows.forEach(([t,g]) => {
+    const row = document.createElement("div"); row.className = "tag-total-row";
+    row.innerHTML = `
+      <div style="flex:1;min-width:0">
+        <div class="tag-total-name">#${escapeHtml(t)}</div>
+        <div class="tag-total-sub">${g.count} gasto${g.count !== 1 ? "s" : ""}${
+          g.hist > g.mes ? ` · ${fmt(g.hist)} en total` : ""}</div>
+      </div>
+      <div class="tag-total-amount">${fmt(g.mes)}</div>`;
+    // Tocarla lleva al historial ya filtrado por esa etiqueta.
+    row.addEventListener("click", () => { histTagFilter = t; switchView("historial"); });
+    tagEl.appendChild(row);
+  });
 
   // Comparativa contra el mes anterior CON DATOS (el mes que se mira puede
   // estar vacío, o puede haber un hueco de meses sin gastos en el medio).

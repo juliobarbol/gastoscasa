@@ -13,23 +13,29 @@ Una app para anotar los gastos de la casa desde el teléfono. Desde acá se:
   pagó → descripción/etiquetas/fecha opcionales). Por defecto el gasto es de
   hoy, pero se puede **fechar otro día** (📅 HOY / AYER / la que sea).
 - Se lleva **quién gastó qué**: cada gasto queda a nombre de una persona y el
-  resumen dice cómo queda la cuenta si parten todo a la mitad.
+  resumen dice cómo queda la cuenta partiendo en partes iguales, entre
+  cuantas personas sean. Se pueden **registrar los pagos** entre ellas para
+  saldar el mes.
 - **Cada uno se crea su cuenta desde la app** (no hay personas quemadas en el
   código ni altas a mano en el panel de Supabase).
 - Se ven el **historial** del mes (filtrable por persona, categoría y
-  etiqueta) y un **resumen** con dona por categoría, evolución mensual,
-  día más caro, día de la semana más caro, gastos hormiga y comparativa
-  contra el mes anterior.
+  etiqueta, y **buscable** por texto o monto) y un **resumen** con dona por
+  categoría, evolución mensual, día más caro, día de la semana más caro,
+  gastos hormiga, totales por etiqueta y comparativa contra el mes anterior.
+- Se puede **repetir un gasto** del historial de un toque, y la descripción
+  autocompleta con las más usadas de esa categoría.
 - Se **navega entre meses** (‹ ›) en historial y resumen: se puede volver a
   cualquier mes con datos, no solo al actual.
-- Se configuran **gastos fijos** mensuales, **límites** por categoría y
-  **categorías** propias (nombre, emoji, color, si cuenta como esencial).
+- Se configuran **gastos fijos** mensuales (con día del mes, dueño fijo y
+  cuotas para las compras en cuotas), **límites** por categoría y para todo
+  el mes —que **avisan** al cruzarlos y proyectan el cierre— y **categorías**
+  propias (nombre, emoji, color, si cuenta como esencial).
 - Se **sincroniza en tiempo real** con el otro teléfono vía Supabase, con
   usuario propio por persona.
 
 ## Forma del proyecto
 
-- **PWA de un solo archivo**: toda la app está en `index.html` (~3.100
+- **PWA de un solo archivo**: toda la app está en `index.html` (~3.590
   líneas, HTML + CSS + JS inline). No hay build step ni bundler.
 - Se sirve como **assets estáticos en Cloudflare** (`wrangler.jsonc`,
   `assets.directory: "."`).
@@ -40,7 +46,7 @@ Una app para anotar los gastos de la casa desde el teléfono. Desde acá se:
 
 ## ⚠️ Trabajar sin quemar tokens — LEER PRIMERO
 
-`index.html` pesa **~160 KB / ~3.090 líneas**. Es bastante más chico que el
+`index.html` pesa **~185 KB / ~3.590 líneas**. Es bastante más chico que el
 de StockMerger, pero vale la misma disciplina: está limpio y modularizado
 (líneas cortas, sin minificados ni base64, banners `// XXX.JS`), así que la
 **lectura por rangos de línea es exacta y barata**. Reglas:
@@ -52,7 +58,7 @@ de StockMerger, pero vale la misma disciplina: está limpio y modularizado
 3. Para **editar**: `Grep` el `old_string` único → `Read` solo esa franja →
    `Edit`. No vuelvas a leer el archivo después de editar (el harness ya
    valida el cambio).
-4. **CSS (`<style>` 26–444)** y **HTML/markup (446–879)** casi nunca hacen
+4. **CSS (`<style>` 26–480)** y **HTML/markup (482–965)** casi nunca hacen
    falta para lógica de negocio — no los leas salvo trabajo de estilos o
    maquetado.
 
@@ -61,9 +67,9 @@ de StockMerger, pero vale la misma disciplina: está limpio y modularizado
 | Región | Líneas |
 |---|---|
 | `<head>` + CDN + script de tema | 1–25 |
-| **CSS** (`<style>`) | 26–444 |
-| **HTML / markup** (gate, header, vistas, modales) | 446–879 |
-| **JS principal** (`<script>`) | 880–3084 |
+| **CSS** (`<style>`) | 26–480 |
+| **HTML / markup** (gate, header, vistas, modales) | 482–965 |
+| **JS principal** (`<script>`) | 966–3585 |
 
 ### Módulos internos (dentro del JS principal)
 
@@ -71,31 +77,32 @@ Cada módulo arranca con un banner `// XXX.JS — ...`. Saltá directo al rango:
 
 | Módulo | Líneas | Rol |
 |---|---|---|
-| `CONST.JS` | 895–931 | Categorías y personas por defecto, teclas, emojis/colores, claves de localStorage. |
-| `STORE.JS` | 932–938 | `load()` / `save()` sobre localStorage. Todo el volumen de datos es chico; no hace falta IndexedDB. |
-| `STATE.JS` | 939–980 | Estado global: `expenses`, `recurring`, `budgets`, `CATEGORIES`, `PEOPLE`, `meId`, config de nube, `viewMonth` (el mes que se está mirando). |
-| `UTILS.JS` | 981–1075 | `uid()`, `fmt()`, `pkey()` (clave normalizada de persona), `liveExpenses()` (filtra lápidas), `escapeHtml()` y los **helpers de fecha/mes** (`ymd()`, `monthOf()`, `isoFromYMD()`, `shiftMonth()`, `monthAnchorISO()`). |
-| `MUTATE.JS` | 1076–1143 | **Toda escritura pasa por acá**: marca `updatedAt` + `_dirty` y dispara el push a la nube. Incluye borrado lógico, purga de lápidas y migración de datos viejos. |
-| `PEOPLE.JS` | 1144–1283 | Quién es quién: chip de usuario, selector "PAGÓ", modal "¿quién soy?", alta/baja de personas. **No hay personas precargadas.** |
-| `UI.JS` | 1284–1476 | Piezas compartidas: confirm propio, navegación entre vistas, **navegador de mes** (`setViewMonth()`), chip de fecha, display del monto, grilla de categorías, teclado, punto de sincronización. |
-| `TAGS.JS` | 1477–1519 | Etiquetas libres por gasto (máx. 5). |
-| `HOME.JS` | 1520–1587 | Pantalla de alta de gastos. |
-| `HISTORIAL.JS` | 1588–1700 | Lista del mes + filtros (persona / categoría / etiqueta) + swipe para borrar. |
-| `EDIT.JS` | 1701–1748 | Modal de edición de un gasto (incluye cambiar quién pagó y **la fecha**). |
-| `DONUT.JS` | 1749–1848 | Dona de distribución por categoría, en SVG a mano (sin librerías de charts). |
-| `WHO.JS` | 1849–1913 | **Quién gastó**: totales por persona y balance "si parten todo a la mitad". |
-| `RESUMEN.JS` | 1914–2111 | Números del mes, evolución, día más caro, día de la semana, gastos hormiga, comparativa mes anterior, barras por categoría. |
-| `RECUR.JS` | 2112–2192 | Gastos fijos mensuales y "aplicar al mes". |
-| `BUDGET.JS` | 2193–2219 | Límite mensual por categoría. |
-| `CATS.JS` | 2220–2320 | Administrador de categorías (nombre, emoji, color, esencial). |
-| `DATA.JS` | 2321–2399 | Exportar CSV / backup JSON, importar, borrar todo. |
-| `SUPABASE.JS` | 2400–2602 | Conexión **opcional** con la nube: config, login, **alta de cuenta (`sbSignUp`)**, `casaJoin()`, sesión, `pullMembers()` / `pullCasa()`. |
-| `SYNC.JS` | 2603–2781 | Motor de sincronización: push de lo sucio, pull incremental, merge last-write-wins. |
-| `REALTIME.JS` | 2782–2815 | Suscripción a `postgres_changes` (gastos, fijos, config y **personas**): lo que carga el otro aparece solo. |
-| `GATE.JS` | 2816–2946 | Pantalla de entrada con 3 modos: `login` / `signup` / `join`. Tapa la app cuando la nube está configurada. |
-| `NUBE_UI.JS` | 2947–3025 | Sección ☁ NUBE COMPARTIDA de la pestaña DATOS. |
-| `THEME.JS` | 3026–3042 | Tema claro / oscuro. |
-| `BOOT.JS` | 3043–3084 | Arranque, listeners de re-sync y registro del service worker. |
+| `CONST.JS` | 981–1029 | Categorías y personas por defecto, teclas, emojis/colores, claves de localStorage. |
+| `STORE.JS` | 1030–1036 | `load()` / `save()` sobre localStorage. Todo el volumen de datos es chico; no hace falta IndexedDB. |
+| `STATE.JS` | 1037–1086 | Estado global: `expenses`, `recurring`, `budgets`, `CATEGORIES`, `PEOPLE`, `meId`, `recurMeta`, config de nube, `viewMonth` (el mes que se está mirando). |
+| `UTILS.JS` | 1087–1205 | `uid()`, `fmt()`, `pkey()` / `normTxt()`, `liveExpenses()` (filtra lápidas **y pagos**), `livePagos()`, `proyectarMes()`, `escapeHtml()` y los **helpers de fecha/mes** (`ymd()`, `monthOf()`, `isoFromYMD()`, `shiftMonth()`, `monthAnchorISO()`). |
+| `MUTATE.JS` | 1206–1289 | **Toda escritura pasa por acá**: marca `updatedAt` + `_dirty` y dispara el push a la nube. Incluye borrado lógico, purga de lápidas y migración de datos viejos. |
+| `PEOPLE.JS` | 1290–1430 | Quién es quién: chip de usuario, selector "PAGÓ", modal "¿quién soy?", alta/baja de personas. **No hay personas precargadas.** |
+| `UI.JS` | 1431–1623 | Piezas compartidas: confirm propio, navegación entre vistas, **navegador de mes** (`setViewMonth()`), chip de fecha, display del monto, grilla de categorías, teclado, punto de sincronización. |
+| `TAGS.JS` | 1624–1666 | Etiquetas libres por gasto (máx. 5). |
+| `HOME.JS` | 1667–1790 | Pantalla de alta de gastos, `repeatExpense()` (repetir uno del historial), sugerencias de descripción y `avisarLimite()`. |
+| `HISTORIAL.JS` | 1791–1931 | Lista del mes + filtros (persona / categoría / etiqueta) + **buscador** (`matchesQuery()`) + swipe para borrar. |
+| `EDIT.JS` | 1932–1979 | Modal de edición de un gasto (incluye cambiar quién pagó y **la fecha**). |
+| `DONUT.JS` | 1980–2079 | Dona de distribución por categoría, en SVG a mano (sin librerías de charts). |
+| `WHO.JS` | 2080–2201 | **Quién gastó**: totales por persona, `calcularSaldos()` / `liquidar()` (balance en partes iguales entre N personas, con las transferencias mínimas) y los pagos del mes. |
+| `PAGOS.JS` | 2202–2242 | Modal para registrar un pago entre personas (saldar la cuenta del mes). |
+| `RESUMEN.JS` | 2243–2485 | Números del mes, evolución, día más caro, día de la semana, gastos hormiga, totales por etiqueta, comparativa mes anterior, barras por categoría con proyección. |
+| `RECUR.JS` | 2486–2657 | Gastos fijos: día del mes, dueño fijo, cuotas (`cuotasRestantes()`), "aplicar al mes" y el ofrecimiento automático al abrir (`ofrecerFijosDelMes()`). |
+| `BUDGET.JS` | 2658–2712 | Límites del mes: por categoría y para todo el mes, con cuánto llevás de cada uno. |
+| `CATS.JS` | 2713–2813 | Administrador de categorías (nombre, emoji, color, esencial). |
+| `DATA.JS` | 2814–2893 | Exportar CSV / backup JSON, importar, borrar todo. |
+| `SUPABASE.JS` | 2894–3096 | Conexión **opcional** con la nube: config, login, **alta de cuenta (`sbSignUp`)**, `casaJoin()`, sesión, `pullMembers()` / `pullCasa()`. |
+| `SYNC.JS` | 3097–3277 | Motor de sincronización: push de lo sucio, pull incremental, merge last-write-wins. |
+| `REALTIME.JS` | 3278–3311 | Suscripción a `postgres_changes` (gastos, fijos, config y **personas**): lo que carga el otro aparece solo. |
+| `GATE.JS` | 3312–3442 | Pantalla de entrada con 3 modos: `login` / `signup` / `join`. Tapa la app cuando la nube está configurada. |
+| `NUBE_UI.JS` | 3443–3521 | Sección ☁ NUBE COMPARTIDA de la pestaña DATOS. |
+| `THEME.JS` | 3522–3538 | Tema claro / oscuro. |
+| `BOOT.JS` | 3539–3585 | Arranque, listeners de re-sync y registro del service worker. |
 
 > Los rangos se mueven al editar. Si algo no cuadra, reubicá con
 > `Grep -n "^// NOMBRE.JS"` y leé el banner.
@@ -113,7 +120,9 @@ Cada módulo arranca con un banner `// XXX.JS — ...`. Saltá directo al rango:
    - `gastos_budgets` — límites por categoría
    - `gastos_categories` — categorías
    - `gastos_people` — personas de la casa
+   - `gastos_recur_meta` — día / dueño / cuotas de cada gasto fijo
    - `gastos_me` — quién soy en ESTE teléfono
+   - `gastos_recur_asked` — último mes en que se ofreció cargar los fijos
    - `gastos_theme` — tema claro/oscuro
    - `gastos_sb_config` — `{ url, anonKey, ns }` de la nube
    - `gastos_sync_cursor` — hasta dónde bajamos de cada tabla
@@ -200,9 +209,9 @@ cuenta ya existe, así que reintentar el alta daría "user already registered"
 |---|---|
 | `casa_houses` | **Lee** el código de la casa (para poder invitar). Solo escribe `casa_join()`. |
 | `casa_members` | **Lee** (pull + Realtime). Quién es quién en la casa. El alta la hace `casa_join()` cuando la persona se registra; cada uno puede editar solo SU fila. |
-| `casa_expenses` | **Lee y escribe** (upsert por `(ns, id)`). Una fila por gasto. |
+| `casa_expenses` | **Lee y escribe** (upsert por `(ns, id)`). Una fila por gasto — y también por **pago entre personas**, con la categoría reservada `__pago`. |
 | `casa_recurring` | **Lee y escribe**. Una fila por gasto fijo. |
-| `casa_settings` | **Lee y escribe**. Config compartida: `categories`, `budgets`, `people` (una fila por clave). |
+| `casa_settings` | **Lee y escribe**. Config compartida: `categories`, `budgets`, `people`, `recur_meta` (una fila por clave). |
 
 Realtime: se suscribe a `postgres_changes` (`event: "*"`) en las tres tablas
 de datos **y en `casa_members`** (para que quien se acaba de registrar
@@ -287,9 +296,34 @@ Reglas del motor, que hay que respetar si se toca:
   abajo no cambia y parece que no se guardó nada.
 - **"Aplicar gastos fijos" va al mes que se está mirando**, no siempre al
   actual (así se puede completar un mes pasado). El confirm dice a qué mes.
-- **El balance del resumen es informativo**, no un libro de cuentas: asume
-  50/50 y dice quién le debe cuánto a quién este mes. No hay registro de
-  pagos entre las dos personas (si algún día hace falta, es feature nueva).
+- **El reparto es en partes iguales entre todas las personas de la casa**,
+  sean dos o cinco. El balance dice quién le transfiere cuánto a quién con
+  la menor cantidad de movimientos; no es un libro de cuentas con
+  porcentajes distintos (eso sigue siendo feature nueva).
+- **Un pago entre personas NO es un gasto.** Salda la cuenta y mueve el
+  balance, pero no suma a ningún total, no entra en la dona ni en las
+  categorías, no aparece en el historial ni en el CSV. Se guarda como una
+  fila más de `casa_expenses` con la categoría reservada `__pago` (`author`
+  = quien paga, `note` = a quién) para no tocar el esquema de la nube, y
+  **`liveExpenses()` lo filtra en un solo lugar** — el mismo por el que ya
+  pasaban todas las lecturas de gastos. Si algún día se agrega otra lectura,
+  que pase por ahí.
+- **Los límites avisan solo cuando el gasto CRUZA el umbral** (80% o 100%),
+  no cada vez que estás pasado: si no, el cartel aparecería en cada gasto
+  del resto del mes y dejarías de mirarlo. Hay límite por categoría y uno
+  para todo el mes (clave reservada `__mes` dentro de `budgets`).
+- **La proyección de cierre solo corre en el mes en curso y del día 5 en
+  adelante.** Con dos días de datos la extrapolación es ruido.
+- **Las cuotas que faltan se DERIVAN**, no se llevan en un contador: se
+  cuenta en cuántos meses distintos ya se aplicó ese fijo. Un contador que
+  hay que ir bajando se pisa si dos teléfonos aplican el mismo mes.
+- **Los datos extra de un gasto fijo** (día del mes, dueño fijo, cuotas)
+  viven en `recurMeta` y viajan por `casa_settings`, no en `casa_recurring`:
+  esa tabla no tiene esas columnas y son configuración, que cambia poco.
+- **Al abrir la app en un mes nuevo se ofrece cargar los fijos que falten**,
+  una sola vez por mes (si decís que no, no vuelve a preguntar). Con nube se
+  pregunta recién después del primer pull, para no volver a cargar los que
+  la otra persona ya aplicó.
 - **Categorías, límites y personas son compartidos** (viajan por
   `casa_settings`). El tema claro/oscuro y "quién soy" son de cada teléfono.
 - **"Borrar todos los datos"** borra para los dos si hay nube (marca todo
@@ -317,10 +351,12 @@ Reglas del motor, que hay que respetar si se toca:
 
 ## Notas de desarrollo
 
-- **PENDIENTE / ideas**: registrar pagos entre personas (saldar la cuenta del
-  mes), gastos divididos en porcentajes distintos a 50/50, notificación push
-  cuando el otro carga un gasto grande, poder cambiar el código de la casa
-  desde la app (hoy es un `update` a mano en Supabase).
+- **PENDIENTE / ideas**: gastos divididos en porcentajes distintos a partes
+  iguales, notificación push cuando el otro carga un gasto grande, poder
+  cambiar el código de la casa desde la app (hoy es un `update` a mano en
+  Supabase), leer la boleta de una foto para cargar el gasto y guardar
+  precios de productos (necesita un proxy con la API key: la app se publica
+  tal cual, así que la key no puede vivir en el HTML).
 - Para cambios en el shape de los datos, acordate de la **migración**
   (`migrateLegacy()`): hay backups viejos de la app original (v8) sin
   `author`, sin `updatedAt` y con `id` numérico.
