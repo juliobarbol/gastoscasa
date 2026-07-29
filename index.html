@@ -60,6 +60,15 @@
     .logo { font-size:20px; color:var(--gold); }
     .logo-text { font-size:13px; font-weight:700; letter-spacing:.15em; color:var(--gold); }
     .month-badge { font-size:9px; font-weight:500; letter-spacing:.12em; color:var(--text-mute); background:var(--bg3); padding:4px 8px; border:1px solid var(--border2); }
+    .month-badge.past { color:var(--gold); border-color:var(--gold); }
+
+    /* NAVEGADOR DE MES (historial y resumen) */
+    .month-nav { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+    .month-nav-arrow { width:30px; height:28px; flex-shrink:0; background:var(--bg3); border:1px solid var(--border2); color:var(--text-dim); font-family:var(--font); font-size:15px; line-height:1; cursor:pointer; border-radius:6px; padding:0; }
+    .month-nav-arrow:active { transform:scale(.94); }
+    .month-nav-arrow:disabled { opacity:.22; cursor:default; transform:none; }
+    .month-nav-label { flex:1; text-align:center; font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--gold); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .month-nav-today { flex-shrink:0; background:none; border:1px solid var(--gold); color:var(--gold); font-family:var(--font); font-size:8px; letter-spacing:.12em; padding:6px 9px; border-radius:20px; cursor:pointer; }
 
     /* USER CHIP + SYNC DOT */
     .user-chip { display:flex; align-items:center; gap:5px; font-size:9px; font-weight:700; letter-spacing:.1em; padding:4px 8px; border:1px solid var(--border2); border-radius:20px; background:var(--bg3); cursor:pointer; white-space:nowrap; max-width:110px; overflow:hidden; text-overflow:ellipsis; }
@@ -120,6 +129,16 @@
     /* NOTE */
     .note-input { width:100%; background:var(--bg2); border:1px solid var(--border); border-top:none; color:var(--text-dim); font-family:var(--font); font-size:11px; padding:5px 12px; outline:none; margin-bottom:6px; letter-spacing:.05em; flex-shrink:0; }
     .note-input::placeholder { color:var(--note-ph); }
+
+    /* FECHA + DESCRIPCIÓN: van en la MISMA fila para no robarle alto al
+       teclado (ver CLAUDE.md: la pantalla de alta no puede crecer). */
+    .note-row { display:flex; align-items:stretch; margin-bottom:6px; flex-shrink:0; }
+    .note-row .note-input { margin-bottom:0; flex:1; min-width:0; border-left:none; }
+    .date-chip { position:relative; display:flex; align-items:center; gap:4px; flex-shrink:0; background:var(--bg2); border:1px solid var(--border); border-top:none; color:var(--text-mute); font-family:var(--font); font-size:9px; letter-spacing:.08em; padding:5px 9px; white-space:nowrap; cursor:pointer; }
+    .date-chip.alt { color:var(--gold); border-color:var(--gold); }
+    /* El input de fecha va invisible ENCIMA del chip: así el tap abre el
+       selector nativo del teléfono sin depender de showPicker(). */
+    .date-chip input[type=date] { position:absolute; top:0; left:0; width:100%; height:100%; opacity:0; margin:0; padding:0; border:none; background:none; cursor:pointer; -webkit-appearance:none; appearance:none; }
 
     /* PAGADO POR (selector de persona en el alta) */
     .payer-row { display:flex; gap:5px; margin-bottom:6px; flex-shrink:0; align-items:center; overflow-x:auto; scrollbar-width:none; }
@@ -508,7 +527,13 @@
     </div>
     <div class="payer-row" id="payer-row-home"></div>
     <div class="cat-row" id="cat-grid-home"></div>
-    <input class="note-input" id="note-home" type="text" placeholder="Descripción (opcional)..." maxlength="40"/>
+    <div class="note-row">
+      <label class="date-chip" id="date-chip-home" title="Fecha del gasto">
+        <span>📅</span><span id="date-chip-home-label">HOY</span>
+        <input type="date" id="date-home" aria-label="Fecha del gasto"/>
+      </label>
+      <input class="note-input" id="note-home" type="text" placeholder="Descripción (opcional)..." maxlength="40"/>
+    </div>
     <div class="tag-input-wrap" id="tag-wrap-home">
       <div class="tag-input-row">
         <input class="tag-input" id="tag-input-home" type="text" placeholder="Agregar etiqueta..." maxlength="20"/>
@@ -527,6 +552,7 @@
 
   <!-- VIEW: HISTORIAL -->
   <div id="view-historial" class="view">
+    <div class="month-nav" id="month-nav-hist"></div>
     <div class="section-title">
       <span id="hist-title">ESTE MES</span>
     </div>
@@ -537,6 +563,7 @@
 
   <!-- VIEW: RESUMEN -->
   <div id="view-resumen" class="view">
+    <div class="month-nav" id="month-nav-res"></div>
     <div class="vital-card">
       <div class="vital-label">MÍNIMO VITAL ESTIMADO</div>
       <div class="vital-amount" id="vital-amount">$0</div>
@@ -709,7 +736,7 @@
 
   <!-- STRIP -->
   <div class="strip">
-    <span class="strip-label">MES ACTUAL</span>
+    <span class="strip-label" id="strip-label">MES ACTUAL</span>
     <span class="strip-total" id="strip-total">$0</span>
   </div>
 
@@ -731,7 +758,13 @@
       </div>
       <div class="payer-row" id="payer-row-edit"></div>
       <div class="cat-row" id="cat-grid-edit"></div>
-      <input class="note-input" id="note-edit" type="text" placeholder="Descripción (opcional)..." maxlength="40"/>
+      <div class="note-row">
+        <label class="date-chip" id="date-chip-edit" title="Fecha del gasto">
+          <span>📅</span><span id="date-chip-edit-label">HOY</span>
+          <input type="date" id="date-edit" aria-label="Fecha del gasto"/>
+        </label>
+        <input class="note-input" id="note-edit" type="text" placeholder="Descripción (opcional)..." maxlength="40"/>
+      </div>
       <div class="tag-input-wrap" id="tag-wrap-edit">
         <div class="tag-input-row">
           <input class="tag-input" id="tag-input-edit" type="text" placeholder="Agregar etiqueta..." maxlength="20"/>
@@ -925,7 +958,9 @@ const getESSENTIAL = () => CATEGORIES.filter(c => c.essential).map(c => c.id);
 
 let currentView   = "home";
 let homeInput     = "", homeCat = null, homeRecurring = false, homePayer = null;
+let homeDate      = "";                          // "YYYY-MM-DD" del gasto que se está cargando
 let editingId     = null, editInput = "", editCat = null, editPayer = null;
+let editDate      = "";
 let editRecurId   = null, recurInput = "", recurCat = null;
 let histFilter    = "todas";
 let histTagFilter = null;
@@ -936,6 +971,10 @@ let editTags = [];
 
 const now = new Date();
 const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+
+// El mes que se está MIRANDO (historial / resumen / strip). `currentMonth` es
+// siempre el mes de hoy y no se mueve; este sí, con el navegador ‹ ›.
+let viewMonth = currentMonth;
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -969,13 +1008,64 @@ function meName() { const p = me(); return p ? p.name : null; }
 const liveExpenses  = () => expenses.filter(e => !e.deleted);
 const liveRecurring = () => recurring.filter(r => !r.deleted);
 
-const monthlyEx = () => liveExpenses().filter(e => e.month === currentMonth);
+// Ojo: filtran por el mes que se está MIRANDO, no por el mes de hoy.
+const monthlyEx = () => liveExpenses().filter(e => e.month === viewMonth);
 const totalMonth = () => monthlyEx().reduce((s,e) => s + e.amount, 0);
 const essTotal   = () => { const ess = getESSENTIAL(); return monthlyEx().filter(e => ess.includes(e.category)).reduce((s,e) => s + e.amount, 0); };
+const monthsWithData = () => [...new Set(liveExpenses().map(e => e.month))].filter(Boolean).sort();
 
 function monthLabel(m) {
   const [yr,mo] = m.split("-");
   return new Date(yr, mo-1).toLocaleDateString("es-CL",{month:"short",year:"2-digit"}).toUpperCase();
+}
+function monthFullLabel(m) {
+  const [yr,mo] = m.split("-");
+  return new Date(yr, mo-1).toLocaleDateString("es-CL",{month:"long",year:"numeric"}).toUpperCase();
+}
+function shiftMonth(m, delta) {
+  const [yr,mo] = m.split("-").map(Number);
+  const d = new Date(yr, mo-1+delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+
+// ── Fechas ──────────────────────────────────────────────────────────
+// El `month` de un gasto se DERIVA de su fecha, y siempre en hora local:
+// con UTC, un gasto del 31 a las 22:00 en Chile caería en el mes siguiente.
+function ymd(d) {
+  const x = d instanceof Date ? d : new Date(d);
+  return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,"0")}-${String(x.getDate()).padStart(2,"0")}`;
+}
+function monthOf(d) { return ymd(d).slice(0,7); }
+function todayYMD() { return ymd(new Date()); }
+
+// "YYYY-MM-DD" → ISO. Si el día no cambió, conserva la hora original (no
+// queremos que editar la nota corra el gasto de hora). Si se mudó de día:
+// hora actual si es hoy, mediodía si es otro día (a salvo de husos horarios).
+function isoFromYMD(s, prevISO) {
+  const prev = prevISO ? new Date(prevISO) : null;
+  if (prev && !isNaN(prev) && ymd(prev) === s) return prev.toISOString();
+  const [yr,mo,d] = s.split("-").map(Number);
+  const n = new Date();
+  return s === todayYMD()
+    ? new Date(yr, mo-1, d, n.getHours(), n.getMinutes(), n.getSeconds()).toISOString()
+    : new Date(yr, mo-1, d, 12, 0, 0).toISOString();
+}
+
+// Etiqueta corta para el chip de fecha del alta / edición.
+function dateChipLabel(s) {
+  if (s === todayYMD()) return "HOY";
+  const y = new Date(); y.setDate(y.getDate()-1);
+  if (s === ymd(y)) return "AYER";
+  const [yr,mo,d] = s.split("-").map(Number);
+  return new Date(yr, mo-1, d).toLocaleDateString("es-CL",{day:"numeric",month:"short"}).toUpperCase();
+}
+
+// Con qué fecha entra un gasto en un mes: si es el mes de hoy, ahora mismo;
+// si es un mes pasado, su último día al mediodía.
+function monthAnchorISO(m) {
+  if (m === currentMonth) return nowISO();
+  const [yr,mo] = m.split("-").map(Number);
+  return new Date(yr, mo, 0, 12, 0, 0).toISOString();
 }
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -995,11 +1085,14 @@ function persistExpenses()  { save("gastos_data", expenses); schedulePush(); }
 function persistRecurring() { save("gastos_recurring", recurring); schedulePush(); }
 function persistSettings()  { save("gastos_categories", CATEGORIES); save("gastos_budgets", budgets); save("gastos_people", PEOPLE); pushSettings(); }
 
-function addExpenseRecord(amount, category, note, isRecurring, tags = [], author = null) {
+// `dateISO` opcional: si no viene, el gasto es de ahora. El `month` SIEMPRE
+// se deriva de la fecha, así un gasto con fecha vieja cae en su mes.
+function addExpenseRecord(amount, category, note, isRecurring, tags = [], author = null, dateISO = null) {
   const who = author || meName();
+  const when = dateISO || nowISO();
   const exp = {
     id: uid(), amount, category, note, tags,
-    month: currentMonth, date: nowISO(), recurring: isRecurring,
+    month: monthOf(when), date: when, recurring: isRecurring,
     author: who, authorId: (personByName(who) || {}).id || null,
     updatedAt: nowISO(), deleted: false, _dirty: true
   };
@@ -1206,7 +1299,64 @@ $("confirm-ok").addEventListener("click", () => {
   if (cb) cb();
 });
 
-$("month-badge").textContent = now.toLocaleDateString("es-CL",{month:"long",year:"numeric"}).toUpperCase();
+// ── Navegador de mes ────────────────────────────────────────────────
+// Se puede retroceder hasta el mes más viejo con datos y avanzar hasta el
+// mes actual: no tiene sentido pasearse por meses vacíos del futuro.
+function monthNavBounds() {
+  const ms = [...monthsWithData(), currentMonth].sort();
+  return { min: ms[0], max: ms[ms.length-1] };   // datos viejos pueden traer meses futuros
+}
+function setViewMonth(m) {
+  const { min, max } = monthNavBounds();
+  const next = m < min ? min : m > max ? max : m;
+  if (next === viewMonth) return;
+  viewMonth = next;
+  updateStrip();          // repinta también el badge y los navegadores
+  renderCurrentView();
+}
+function buildMonthNav(id) {
+  const el = $(id);
+  el.innerHTML = `
+    <button class="month-nav-arrow prev" title="Mes anterior">‹</button>
+    <span class="month-nav-label"></span>
+    <button class="month-nav-arrow next" title="Mes siguiente">›</button>
+    <button class="month-nav-today oculto">HOY</button>`;
+  el.querySelector(".prev").addEventListener("click", () => setViewMonth(shiftMonth(viewMonth,-1)));
+  el.querySelector(".next").addEventListener("click", () => setViewMonth(shiftMonth(viewMonth, 1)));
+  el.querySelector(".month-nav-today").addEventListener("click", () => setViewMonth(currentMonth));
+}
+function renderMonthNav() {
+  const badge = $("month-badge");
+  badge.textContent = monthFullLabel(viewMonth);
+  badge.classList.toggle("past", viewMonth !== currentMonth);
+  const { min, max } = monthNavBounds();
+  ["month-nav-hist","month-nav-res"].forEach(id => {
+    const el = $(id); if (!el) return;
+    el.querySelector(".month-nav-label").textContent = monthFullLabel(viewMonth);
+    el.querySelector(".prev").disabled = viewMonth <= min;
+    el.querySelector(".next").disabled = viewMonth >= max;
+    // `.oculto` es visibility:hidden: el botón sigue ocupando su lugar y la
+    // fila no se mueve al cambiar de mes.
+    el.querySelector(".month-nav-today").classList.toggle("oculto", viewMonth === currentMonth);
+  });
+}
+buildMonthNav("month-nav-hist");
+buildMonthNav("month-nav-res");
+
+// Chip de fecha del alta / edición (📅 HOY · AYER · 12 JUL).
+function refreshDateChip(suffix, val) {
+  $(`date-chip-${suffix}-label`).textContent = dateChipLabel(val);
+  $(`date-chip-${suffix}`).classList.toggle("alt", val !== todayYMD());
+}
+function wireDateChip(suffix, get, set) {
+  const inp = $("date-" + suffix);
+  inp.max = todayYMD();
+  inp.addEventListener("change", () => {
+    set(inp.value || todayYMD());
+    inp.value = get();
+    refreshDateChip(suffix, get());
+  });
+}
 
 function switchView(view) {
   currentView = view;
@@ -1306,7 +1456,13 @@ function buildPickerGrid(containerId, options, getSel, onSel) {
   });
 }
 
-function updateStrip() { $("strip-total").textContent = fmt(totalMonth()); }
+// Se llama después de toda mutación, así que también refresca el badge del
+// mes y los navegadores (los datos nuevos pueden mover el rango de meses).
+function updateStrip() {
+  $("strip-total").textContent = fmt(totalMonth());
+  $("strip-label").textContent = viewMonth === currentMonth ? "MES ACTUAL" : monthFullLabel(viewMonth);
+  renderMonthNav();
+}
 
 // Punto de estado de sincronización (arriba, al lado del mes).
 function setSync(st) {
@@ -1368,6 +1524,11 @@ buildKeypad("keypad-home", k => {
   processKey(k, () => homeInput, v => { homeInput = v; updateDisplay("home", homeInput); updateAddBtn(); });
 });
 
+homeDate = todayYMD();
+$("date-home").value = homeDate;
+refreshDateChip("home", homeDate);
+wireDateChip("home", () => homeDate, v => { homeDate = v; });
+
 $("recur-toggle-btn").addEventListener("click", () => {
   homeRecurring = !homeRecurring;
   $("recur-switch").classList.toggle("on", homeRecurring);
@@ -1395,7 +1556,7 @@ $("add-btn").addEventListener("click", () => {
     recurring = [{id:uid(), amount, category:homeCat, note, updatedAt:nowISO(), deleted:false, _dirty:true}, ...recurring];
     persistRecurring();
   }
-  addExpenseRecord(amount, homeCat, note, homeRecurring, tags, payer.name);
+  const exp = addExpenseRecord(amount, homeCat, note, homeRecurring, tags, payer.name, isoFromYMD(homeDate));
 
   const content = $("view-home");
   content.style.animation = "none"; void content.offsetHeight;
@@ -1403,9 +1564,17 @@ $("add-btn").addEventListener("click", () => {
 
   const la = $("last-added");
   const cat = catById(homeCat);
-  la.textContent = `✓ ${fmt(amount)} en ${cat.label} · ${payer.name}${homeRecurring ? " · guardado como fijo" : ""}`;
+  const cuando = homeDate === todayYMD() ? "" : " · " + dateChipLabel(homeDate);
+  la.textContent = `✓ ${fmt(amount)} en ${cat.label} · ${payer.name}${cuando}${homeRecurring ? " · fijo" : ""}`;
   la.classList.remove("oculto");
 
+  // Si el gasto cayó en otro mes (fecha vieja, o estábamos mirando el mes
+  // pasado), mostramos ese mes: si no, el total de abajo no se mueve y
+  // parece que no se guardó nada.
+  if (exp.month !== viewMonth) setViewMonth(exp.month);
+
+  // `homeDate` NO se resetea a propósito: si estás cargando gastos de otro
+  // día, van varios seguidos. El chip queda en dorado para que se note.
   homeInput = ""; homeCat = null; homeRecurring = false; homeTags = [];
   $("note-home").value = "";
   refreshHomeTags();
@@ -1420,7 +1589,7 @@ $("add-btn").addEventListener("click", () => {
 // ════════════════════════════════════════════════════════════════════
 function renderHistorial() {
   const mex = monthlyEx();
-  $("hist-title").textContent = `ESTE MES · ${fmt(totalMonth())}`;
+  $("hist-title").textContent = `${viewMonth === currentMonth ? "ESTE MES" : monthFullLabel(viewMonth)} · ${fmt(totalMonth())}`;
 
   // Filtro por persona
   const pr = $("person-filter-row"); pr.innerHTML = "";
@@ -1538,11 +1707,16 @@ buildKeypad("keypad-edit", k => {
 function updateSaveEditBtn() {
   $("save-edit-btn").disabled = !(editInput && parseFloat(editInput) > 0 && editCat);
 }
+wireDateChip("edit", () => editDate, v => { editDate = v; });
+
 function openEditModal(e) {
   editingId = e.id; editInput = String(e.amount); editCat = e.category;
   editTags = [...(e.tags||[])];
   const p = personByName(e.author);
   editPayer = p ? p.id : null;
+  editDate = ymd(e.date);
+  $("date-edit").value = editDate;
+  refreshDateChip("edit", editDate);
   $("note-edit").value = e.note || "";
   refreshEditTags();
   updateDisplay("edit", editInput);
@@ -1558,12 +1732,16 @@ $("save-edit-btn").addEventListener("click", () => {
   const amount = parseFloat(editInput); if (!amount || !editCat) return;
   const note = $("note-edit").value.trim();
   const payer = personById(editPayer);
+  const orig = expenses.find(e => e.id === editingId);
+  const when = isoFromYMD(editDate || todayYMD(), orig && orig.date);
   expenses = expenses.map(e => e.id === editingId
-    ? touchExpense({...e, amount, category:editCat, note, tags:[...editTags],
+    ? touchExpense({...e, amount, category:editCat, note, tags:[...editTags], date:when, month:monthOf(when),
                     author: payer ? payer.name : e.author, authorId: payer ? payer.id : e.authorId})
     : e);
-  persistExpenses(); closeEditModal(); renderHistorial(); updateStrip();
-  if (currentView === "resumen") renderResumen();
+  persistExpenses(); closeEditModal();
+  // Si le cambiaron la fecha y se mudó de mes, seguimos al gasto.
+  if (monthOf(when) !== viewMonth) setViewMonth(monthOf(when));
+  else { renderHistorial(); updateStrip(); if (currentView === "resumen") renderResumen(); }
 });
 
 
@@ -1742,6 +1920,12 @@ function renderResumen() {
   $("vital-amount").textContent = fmt(essTotal());
   $("resumen-total").textContent = fmt(total);
 
+  // Los títulos dicen "este mes" solo si de verdad es el mes de hoy.
+  const mesTxt = viewMonth === currentMonth ? "ESTE MES" : monthFullLabel(viewMonth);
+  $("analysis-who").querySelector(".analysis-title").textContent = "QUIÉN GASTÓ · " + mesTxt;
+  $("view-resumen").querySelector(".total-label").textContent = "TOTAL " + mesTxt;
+  $("view-resumen").querySelector(".vital-sub").textContent = "gastos esenciales de " + mesTxt.toLowerCase();
+
   renderDonut(mex, total);
   renderWho(mex, total);
 
@@ -1780,12 +1964,14 @@ function renderResumen() {
     const maxVal = Math.max(...vals) || 1;
     last6.forEach((m,i) => {
       const wrap = document.createElement("div"); wrap.className = "trend-bar-wrap";
-      const isCurrentM = m === currentMonth;
+      const isViewM = m === viewMonth;                 // se marca el mes que se está mirando
       const pct = Math.round((vals[i]/maxVal)*100);
+      wrap.style.cursor = "pointer";
       wrap.innerHTML = `
         <div class="trend-val">${vals[i] > 0 ? fmt(vals[i]).replace("$","") : ""}</div>
-        <div class="trend-bar" style="height:${pct}%;background:${isCurrentM ? "var(--gold)" : "var(--trend-inactive)"};min-height:3px"></div>
-        <div class="trend-mo" style="color:${isCurrentM ? "var(--gold)" : "var(--text-mute)"}">${monthLabel(m)}</div>`;
+        <div class="trend-bar" style="height:${pct}%;background:${isViewM ? "var(--gold)" : "var(--trend-inactive)"};min-height:3px"></div>
+        <div class="trend-mo" style="color:${isViewM ? "var(--gold)" : "var(--text-mute)"}">${monthLabel(m)}</div>`;
+      wrap.addEventListener("click", () => setViewMonth(m));
       barsEl.appendChild(wrap);
     });
   } else trendEl.style.display = "none";
@@ -1836,12 +2022,13 @@ function renderResumen() {
   }
   $("analysis-hormiga").style.display = mex.length ? "block" : "none";
 
-  // Comparativa contra el mes anterior
-  const currIdx = months.indexOf(currentMonth);
+  // Comparativa contra el mes anterior CON DATOS (el mes que se mira puede
+  // estar vacío, o puede haber un hueco de meses sin gastos en el medio).
+  const prevMonth = months.filter(m => m < viewMonth).pop();
   const compEl = $("analysis-comp");
-  if (currIdx > 0) {
+  if (prevMonth) {
     compEl.style.display = "block";
-    const prevMonth = months[currIdx-1];
+    compEl.querySelector(".analysis-title").textContent = `${mesTxt} VS ${monthLabel(prevMonth)}`;
     $("comp-prev-label").textContent = monthLabel(prevMonth);
     const prevEx = all.filter(e => e.month === prevMonth);
     const compList = $("comp-list"); compList.innerHTML = "";
@@ -1910,10 +2097,11 @@ function renderResumen() {
     [...months].reverse().forEach(m => {
       const mTotal = all.filter(e => e.month === m).reduce((s,e) => s+e.amount, 0);
       const mEss = all.filter(e => e.month === m && ess.includes(e.category)).reduce((s,e) => s+e.amount, 0);
-      const [yr,mo] = m.split("-");
-      const label = new Date(yr, mo-1).toLocaleDateString("es-CL",{month:"long",year:"numeric"}).toUpperCase();
       const row = document.createElement("div"); row.className = "month-row";
-      row.innerHTML = `<div><div class="month-label">${label}</div><div class="month-essential">Esencial: ${fmt(mEss)}</div></div><div class="month-total">${fmt(mTotal)}</div>`;
+      row.style.cursor = "pointer";
+      const sel = m === viewMonth;
+      row.innerHTML = `<div><div class="month-label"${sel ? ' style="color:var(--gold)"' : ""}>${monthFullLabel(m)}</div><div class="month-essential">Esencial: ${fmt(mEss)}</div></div><div class="month-total">${fmt(mTotal)}</div>`;
+      row.addEventListener("click", () => setViewMonth(m));   // tocar un mes lo abre
       histEl.appendChild(row);
     });
   }
@@ -1957,17 +2145,22 @@ function renderRecurrentes() {
 $("apply-recurring-btn").addEventListener("click", () => {
   const items = liveRecurring();
   if (items.length === 0) return;
+  // Se aplican al mes que se está mirando, no siempre al actual: así se
+  // puede completar un mes pasado desde el navegador de mes.
+  const destino = monthFullLabel(viewMonth);
   showConfirm("Aplicar gastos fijos",
-    `Se agregarán ${items.length} gasto(s) fijo(s) al mes actual. Los que ya estén registrados este mes no se duplican.`,
+    `Se agregarán ${items.length} gasto(s) fijo(s) a ${destino}. Los que ya estén registrados en ese mes no se duplican.`,
     "Aplicar",
     () => {
       const yaAplicados = monthlyEx().filter(e => e.recurring).map(e => e.category + "|" + (e.note||""));
       let added = 0;
       items.forEach(r => {
-        if (!yaAplicados.includes(r.category + "|" + (r.note||""))) { addExpenseRecord(r.amount, r.category, r.note, true); added++; }
+        if (!yaAplicados.includes(r.category + "|" + (r.note||""))) {
+          addExpenseRecord(r.amount, r.category, r.note, true, [], null, monthAnchorISO(viewMonth)); added++;
+        }
       });
       updateStrip(); renderRecurrentes();
-      setTimeout(() => showConfirm("Listo", `Se aplicaron ${added} gasto(s) fijo(s) al mes actual.`, "OK", () => {}, false), 250);
+      setTimeout(() => showConfirm("Listo", `Se aplicaron ${added} gasto(s) fijo(s) a ${destino}.`, "OK", () => {}, false), 250);
     }, false);
 });
 
