@@ -289,6 +289,15 @@
        divisoria vive ahí y no acá (si no, salen dos). */
     .budget-input-row { display:flex; align-items:center; gap:8px; padding:10px 0 4px; }
     .proj-line { font-size:9px; letter-spacing:.08em; color:var(--text-mute); text-align:right; margin:-6px 0 12px; }
+
+    /* PAGOS ENTRE PERSONAS */
+    .who-head { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .modal-hint { font-size:9px; line-height:1.5; letter-spacing:.05em; color:var(--text-mute); margin-bottom:8px; }
+    .saldo-line { font-size:10px; letter-spacing:.05em; margin-top:3px; }
+    .pago-row { display:flex; align-items:center; gap:8px; padding:7px 0; border-top:1px solid var(--border); font-size:10px; color:var(--text-dim); }
+    .pago-row .pago-txt { flex:1; }
+    .pago-title { font-size:9px; letter-spacing:.15em; color:var(--text-mute); margin:12px 0 2px; }
+    .settle-btn { background:none; border:1px solid var(--green); color:var(--green); font-family:var(--font); font-size:8px; letter-spacing:.1em; padding:5px 9px; border-radius:20px; cursor:pointer; flex-shrink:0; }
     .budget-spent { font-size:9px; letter-spacing:.06em; color:var(--text-mute); padding:0 0 9px 26px; border-bottom:1px solid var(--border); }
     .budget-total-row + .budget-spent { border-bottom:2px solid var(--border2); padding-bottom:13px; margin-bottom:6px; }
     .budget-cat-info { display:flex; align-items:center; gap:8px; flex:1; }
@@ -592,9 +601,13 @@
 
     <!-- QUIÉN GASTÓ -->
     <div class="analysis-block" id="analysis-who">
-      <div class="analysis-title">QUIÉN GASTÓ ESTE MES</div>
+      <div class="analysis-title who-head">
+        <span id="who-title">QUIÉN GASTÓ ESTE MES</span>
+        <span class="section-title-action" id="add-pago-btn">+ REGISTRAR PAGO</span>
+      </div>
       <div id="who-list"></div>
       <div class="who-balance" id="who-balance"></div>
+      <div id="who-pagos"></div>
     </div>
 
     <div class="stat-row">
@@ -797,6 +810,30 @@
     </div>
   </div>
 
+  <!-- MODAL: REGISTRAR PAGO ENTRE PERSONAS -->
+  <div class="modal-overlay" id="modal-pago">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">REGISTRAR PAGO</span>
+        <button class="modal-close" id="modal-pago-close">×</button>
+      </div>
+      <div class="modal-hint">Para saldar la cuenta del mes. No cuenta como gasto de la casa.</div>
+      <div class="display">
+        <div class="display-label">MONTO</div>
+        <div class="display-amount">
+          <span class="display-currency">$</span>
+          <span class="display-digits is-empty" id="digits-pago">0</span>
+          <span class="display-cursor" id="cursor-pago" style="display:none">_</span>
+        </div>
+        <div class="display-preview oculto" id="preview-pago"></div>
+      </div>
+      <div class="payer-row" id="payer-row-pago-de"></div>
+      <div class="payer-row" id="payer-row-pago-a"></div>
+      <div class="keypad" id="keypad-pago"></div>
+      <button class="add-btn green" id="save-pago-btn" disabled>GUARDAR PAGO</button>
+    </div>
+  </div>
+
   <!-- MODAL: EDITAR RECURRENTE -->
   <div class="modal-overlay" id="modal-recur">
     <div class="modal">
@@ -939,6 +976,14 @@ const COLOR_OPTIONS = ["#f59e0b","#f97316","#ef4444","#ec4899","#8b5cf6","#3b82f
 // chocar con una categoría: las categorías tienen id "cat_<uid>".
 const TOTAL_BUDGET_KEY = "__mes";
 
+// Categoría reservada para los PAGOS ENTRE PERSONAS (saldar la cuenta del
+// mes). No son gastos de la casa: mueven el saldo entre dos personas y no
+// tienen que sumar a ningún total ni aparecer en la dona. Se guardan como
+// una fila más de `casa_expenses` para no tocar el esquema de la nube, y
+// `liveExpenses()` los deja afuera de TODAS las lecturas de gastos.
+// En un pago: `author` = quien paga, `note` = a quién le paga.
+const PAGO_CAT = "__pago";
+
 // Nube
 const SB_CFG_KEY   = "gastos_sb_config";   // { url, anonKey, ns }
 const SB_AUTH_KEY  = "gastos-auth";        // storageKey de la sesión de Supabase
@@ -986,6 +1031,7 @@ let homeDate      = "";                          // "YYYY-MM-DD" del gasto que s
 let editingId     = null, editInput = "", editCat = null, editPayer = null;
 let editDate      = "";
 let editRecurId   = null, recurInput = "", recurCat = null;
+let pagoInput     = "", pagoDe = null, pagoA = null;   // modal de pago entre personas
 let histFilter    = "todas";
 let histTagFilter = null;
 let histQuery     = "";                          // texto del buscador del historial
@@ -1031,11 +1077,17 @@ function me() { return personById(meId); }
 function meName() { const p = me(); return p ? p.name : null; }
 
 // Vivos = sin lápida. TODAS las lecturas pasan por acá.
-const liveExpenses  = () => expenses.filter(e => !e.deleted);
+// Los pagos entre personas viven en el mismo array pero NO son gastos, así
+// que salen de acá una sola vez y quedan afuera de todo lo que cuelga:
+// totales, dona, categorías, hormigas, CSV. Para verlos, `livePagos()`.
+const isPago        = e => e.category === PAGO_CAT;
+const liveExpenses  = () => expenses.filter(e => !e.deleted && !isPago(e));
+const livePagos     = () => expenses.filter(e => !e.deleted && isPago(e));
 const liveRecurring = () => recurring.filter(r => !r.deleted);
 
 // Ojo: filtran por el mes que se está MIRANDO, no por el mes de hoy.
-const monthlyEx = () => liveExpenses().filter(e => e.month === viewMonth);
+const monthlyEx    = () => liveExpenses().filter(e => e.month === viewMonth);
+const monthlyPagos = () => livePagos().filter(e => e.month === viewMonth);
 const totalMonth = () => monthlyEx().reduce((s,e) => s + e.amount, 0);
 const essTotal   = () => { const ess = getESSENTIAL(); return monthlyEx().filter(e => ess.includes(e.category)).reduce((s,e) => s + e.amount, 0); };
 const monthsWithData = () => [...new Set(liveExpenses().map(e => e.month))].filter(Boolean).sort();
@@ -1144,6 +1196,22 @@ function addExpenseRecord(amount, category, note, isRecurring, tags = [], author
   return exp;
 }
 
+// Un pago entre personas: `de` le transfirió `a` para saldar la cuenta.
+// Reusa el registro de gasto (misma sincronización, mismo borrado lógico),
+// pero con la categoría reservada que lo mantiene fuera de los totales.
+function addPago(amount, de, a, dateISO) {
+  const when = dateISO || nowISO();
+  const pago = {
+    id: uid(), amount, category: PAGO_CAT, note: a, tags: [],
+    month: monthOf(when), date: when, recurring: false,
+    author: de, authorId: (personByName(de) || {}).id || null,
+    updatedAt: nowISO(), deleted: false, _dirty: true
+  };
+  expenses = [pago, ...expenses];
+  persistExpenses();
+  return pago;
+}
+
 function deleteExpense(id) {
   expenses = expenses.map(e => e.id === id ? touchExpense({...e, deleted:true}) : e);
   persistExpenses();
@@ -1195,9 +1263,9 @@ function renderUserChip() {
 }
 
 // Selector "pagado por" del alta y de la edición.
-function buildPayerRow(containerId, getSel, onSel, locked) {
+function buildPayerRow(containerId, getSel, onSel, locked, caption = "PAGÓ") {
   const el = $(containerId);
-  el.innerHTML = '<span class="payer-caption">PAGÓ</span>';
+  el.innerHTML = `<span class="payer-caption">${escapeHtml(caption)}</span>`;
   // Todavía no hay nadie (primer arranque sin nube): que se cree a sí mismo.
   if (PEOPLE.length === 0) {
     const btn = document.createElement("button");
@@ -1320,6 +1388,7 @@ $("save-person-btn").addEventListener("click", () => {
 function rebuildAllPayerRows() {
   buildPayerRow("payer-row-home", () => homePayer, id => { homePayer = id; }, !!sbSession);
   buildPayerRow("payer-row-edit", () => editPayer, id => { editPayer = id; }, false);
+  rebuildPagoRows();
 }
 
 
@@ -1973,28 +2042,63 @@ function renderDonut(list, total) {
 
 
 // ════════════════════════════════════════════════════════════════════
-// WHO.JS — cuánto puso cada persona y cómo queda la cuenta entre ambos
+// WHO.JS — cuánto puso cada persona y cómo queda la cuenta entre todos
 // ════════════════════════════════════════════════════════════════════
+// Reparto en partes iguales. El saldo de cada uno es lo que puso (gastos +
+// pagos que hizo − pagos que recibió) menos la parte que le tocaba.
+function calcularSaldos(mex, pagos) {
+  const gente = new Map();
+  const tocar = nombre => {
+    const k = pkey(nombre) || "_sin";
+    if (!gente.has(k)) gente.set(k, {name: nombre || "Sin asignar", color: personColor(nombre),
+                                     total: 0, count: 0, enviado: 0, recibido: 0});
+    return gente.get(k);
+  };
+  // Las personas de la casa aparecen siempre, aunque no hayan gastado.
+  PEOPLE.forEach(p => tocar(p.name));
+  // Y también quien tenga gastos viejos a su nombre pero ya no esté en la lista.
+  mex.forEach(e => { const g = tocar(e.author); g.total += e.amount; g.count++; });
+  pagos.forEach(p => {
+    tocar(p.author).enviado += p.amount;
+    if (p.note) tocar(p.note).recibido += p.amount;
+  });
+
+  const rows = [...gente.values()];
+  const totalGastos = mex.reduce((s,e) => s + e.amount, 0);
+  const parte = rows.length ? totalGastos / rows.length : 0;
+  rows.forEach(r => { r.saldo = r.total + r.enviado - r.recibido - parte; });
+  return { rows: rows.sort((a,b) => b.total - a.total), parte };
+}
+
+// Quién le transfiere a quién para quedar en cero, con la menor cantidad de
+// transferencias: se empareja el que más debe con el que más puso. Redondeo
+// a $1: por debajo de eso no vale la pena mover plata.
+function liquidar(rows) {
+  const deben = rows.filter(r => r.saldo < -1).map(r => ({name: r.name, falta: -r.saldo}))
+                    .sort((a,b) => b.falta - a.falta);
+  const ponen = rows.filter(r => r.saldo > 1).map(r => ({name: r.name, sobra: r.saldo}))
+                    .sort((a,b) => b.sobra - a.sobra);
+  const movs = [];
+  let i = 0, j = 0;
+  while (i < deben.length && j < ponen.length) {
+    const monto = Math.min(deben[i].falta, ponen[j].sobra);
+    if (monto >= 1) movs.push({de: deben[i].name, a: ponen[j].name, monto});
+    deben[i].falta -= monto; ponen[j].sobra -= monto;
+    if (deben[i].falta < 1) i++;
+    if (ponen[j].sobra < 1) j++;
+  }
+  return movs;
+}
+
 function renderWho(mex, total) {
   const list = $("who-list"); list.innerHTML = "";
   const bal = $("who-balance");
+  const pagos = monthlyPagos();
+  const { rows, parte } = calcularSaldos(mex, pagos);
 
-  // Agrupa por autor (por nombre normalizado, así aguanta personas borradas
-  // de la lista pero con gastos viejos a su nombre).
-  const groups = new Map();
-  mex.forEach(e => {
-    const k = pkey(e.author) || "_sin";
-    if (!groups.has(k)) groups.set(k, {name: e.author || "Sin asignar", total: 0, count: 0, color: personColor(e.author)});
-    const g = groups.get(k); g.total += e.amount; g.count++;
-  });
-  // Las personas de la casa aparecen siempre, aunque no hayan gastado.
-  PEOPLE.forEach(p => {
-    const k = pkey(p.name);
-    if (!groups.has(k)) groups.set(k, {name: p.name, total: 0, count: 0, color: p.color});
-  });
+  renderPagosDelMes(pagos);
 
-  const rows = [...groups.values()].sort((a,b) => b.total - a.total);
-  if (rows.length === 0 || total <= 0) {
+  if (rows.length === 0 || (total <= 0 && pagos.length === 0)) {
     list.innerHTML = '<div style="font-size:10px;color:var(--text-mute);text-align:center;padding:8px 0">Sin gastos este mes.</div>';
     bal.innerHTML = "";
     return;
@@ -2017,24 +2121,87 @@ function renderWho(mex, total) {
     list.appendChild(row);
   });
 
-  // Balance: si fueran a partir todo a la mitad, quién le debe a quién.
-  const conGasto = rows.filter(r => r.total > 0 || PEOPLE.some(p => pkey(p.name) === pkey(r.name)));
-  if (conGasto.length === 2) {
-    const [a,b] = conGasto;
-    const mitad = total / 2;
-    const diff = Math.abs(a.total - mitad);
-    if (Math.round(diff) <= 0) {
-      bal.innerHTML = `Van parejos: cada uno puso <strong>${fmt(mitad)}</strong>.`;
-    } else {
-      const deudor = a.total < b.total ? a : b;
-      const acreedor = a.total < b.total ? b : a;
-      bal.innerHTML = `Si parten todo a la mitad (<strong>${fmt(mitad)}</strong> cada uno), ` +
-                      `<strong>${escapeHtml(deudor.name)}</strong> le debe <strong>${fmt(diff)}</strong> a ${escapeHtml(acreedor.name)}.`;
-    }
-  } else {
-    bal.innerHTML = "";
+  // Balance: quién le debe cuánto a quién si parten todo en partes iguales.
+  const movs = liquidar(rows);
+  if (rows.length < 2) { bal.innerHTML = ""; return; }
+  if (!movs.length) {
+    bal.innerHTML = `Van parejos: le tocaba <strong>${fmt(parte)}</strong> a cada uno.`;
+    return;
   }
+  bal.innerHTML = `Partiendo en partes iguales (<strong>${fmt(parte)}</strong> cada uno):`;
+  movs.forEach(m => {
+    const linea = document.createElement("div");
+    linea.className = "saldo-line";
+    linea.innerHTML = `<strong>${escapeHtml(m.de)}</strong> le debe <strong>${fmt(m.monto)}</strong> a ${escapeHtml(m.a)} ` +
+                      `<button class="settle-btn">SALDAR</button>`;
+    // Saldar abre el modal ya cargado con ese movimiento: es el 99% de los casos.
+    linea.querySelector(".settle-btn").addEventListener("click", () => abrirPago(m));
+    bal.appendChild(linea);
+  });
 }
+
+// Los pagos ya registrados en el mes, para poder borrar uno mal cargado.
+function renderPagosDelMes(pagos) {
+  const el = $("who-pagos"); el.innerHTML = "";
+  if (!pagos.length) return;
+  const t = document.createElement("div");
+  t.className = "pago-title"; t.textContent = "PAGOS ENTRE USTEDES";
+  el.appendChild(t);
+  [...pagos].sort((a,b) => String(b.date).localeCompare(String(a.date))).forEach(p => {
+    const row = document.createElement("div"); row.className = "pago-row";
+    const cuando = new Date(p.date).toLocaleDateString("es-CL",{day:"numeric",month:"short"});
+    row.innerHTML = `
+      <span class="pago-txt">${escapeHtml(p.author || "?")} → ${escapeHtml(p.note || "?")} · <strong>${fmt(p.amount)}</strong></span>
+      <span style="color:var(--text-mute);font-size:9px">${cuando}</span>
+      <button class="icon-btn del-icon" title="Eliminar">×</button>`;
+    row.querySelector(".del-icon").addEventListener("click", () => {
+      showConfirm("Eliminar pago", `¿Eliminar el pago de ${fmt(p.amount)} de ${p.author} a ${p.note}?`, "Eliminar",
+        () => { deleteExpense(p.id); renderResumen(); });
+    });
+    el.appendChild(row);
+  });
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// PAGOS.JS — modal para registrar un pago entre personas
+// ════════════════════════════════════════════════════════════════════
+buildKeypad("keypad-pago", k => {
+  processKey(k, () => pagoInput, v => { pagoInput = v; updateDisplay("pago", pagoInput); updateSavePagoBtn(); });
+});
+function updateSavePagoBtn() {
+  $("save-pago-btn").disabled = !(pagoInput && parseFloat(pagoInput) > 0 && pagoDe && pagoA && pagoDe !== pagoA);
+  $("save-pago-btn").textContent = (pagoDe && pagoDe === pagoA) ? "ELEGÍ DOS PERSONAS DISTINTAS" : "GUARDAR PAGO";
+}
+function rebuildPagoRows() {
+  buildPayerRow("payer-row-pago-de", () => pagoDe, id => { pagoDe = id; updateSavePagoBtn(); }, false, "DE");
+  buildPayerRow("payer-row-pago-a",  () => pagoA,  id => { pagoA  = id; updateSavePagoBtn(); }, false, "A");
+}
+// `mov` opcional: el movimiento sugerido por el balance, ya cargado.
+function abrirPago(mov) {
+  const de = mov ? personByName(mov.de) : null;
+  const a  = mov ? personByName(mov.a)  : null;
+  pagoDe = de ? de.id : meId;
+  pagoA  = a  ? a.id  : null;
+  pagoInput = mov ? String(Math.round(mov.monto)) : "";
+  rebuildPagoRows();
+  updateDisplay("pago", pagoInput);
+  updateSavePagoBtn();
+  $("modal-pago").classList.add("open");
+}
+function closePagoModal() { $("modal-pago").classList.remove("open"); }
+$("modal-pago-close").addEventListener("click", closePagoModal);
+$("modal-pago").addEventListener("click", e => { if (e.target === $("modal-pago")) closePagoModal(); });
+$("add-pago-btn").addEventListener("click", () => abrirPago(null));
+$("save-pago-btn").addEventListener("click", () => {
+  const amount = parseFloat(pagoInput);
+  const de = personById(pagoDe), a = personById(pagoA);
+  if (!amount || !de || !a || de.id === a.id) return;
+  // El pago entra en el mes que se está mirando: se salda ESE mes.
+  addPago(amount, de.name, a.name, monthAnchorISO(viewMonth));
+  closePagoModal();
+  renderResumen(); updateStrip();
+});
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -2049,7 +2216,7 @@ function renderResumen() {
 
   // Los títulos dicen "este mes" solo si de verdad es el mes de hoy.
   const mesTxt = viewMonth === currentMonth ? "ESTE MES" : monthFullLabel(viewMonth);
-  $("analysis-who").querySelector(".analysis-title").textContent = "QUIÉN GASTÓ · " + mesTxt;
+  $("who-title").textContent = "QUIÉN GASTÓ · " + mesTxt;
   $("view-resumen").querySelector(".total-label").textContent = "TOTAL " + mesTxt;
   $("view-resumen").querySelector(".vital-sub").textContent = "gastos esenciales de " + mesTxt.toLowerCase();
 
