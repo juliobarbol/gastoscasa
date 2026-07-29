@@ -202,6 +202,14 @@
     .filter-chip.active { border-color:var(--gold); color:var(--gold); background:var(--gold)12; }
     .filter-chip.active-tag { border-color:#3b82f6; color:#3b82f6; background:#3b82f612; }
 
+    /* BÚSQUEDA EN EL HISTORIAL */
+    .search-row { position:relative; margin-bottom:10px; }
+    .search-input { width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:20px; color:var(--text-dim); font-family:var(--font); font-size:10px; letter-spacing:.05em; padding:8px 32px 8px 12px; outline:none; }
+    .search-input:focus { border-color:var(--gold); }
+    .search-input::placeholder { color:var(--note-ph); }
+    .search-clear { position:absolute; right:2px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--text-mute); font-family:var(--font); font-size:15px; line-height:1; cursor:pointer; padding:5px 10px; }
+    .search-count { font-size:9px; letter-spacing:.08em; color:var(--text-mute); margin:-4px 0 8px 12px; }
+
     /* CONFIRM DIALOG */
     .confirm-overlay { position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; }
     .confirm-box { background:var(--bg2); border:1px solid var(--border2); padding:24px; max-width:320px; width:100%; animation:modalIn .2s ease; }
@@ -532,7 +540,8 @@
         <span>📅</span><span id="date-chip-home-label">HOY</span>
         <input type="date" id="date-home" aria-label="Fecha del gasto"/>
       </label>
-      <input class="note-input" id="note-home" type="text" placeholder="Descripción (opcional)..." maxlength="40"/>
+      <input class="note-input" id="note-home" type="text" placeholder="Descripción (opcional)..." maxlength="40" list="note-suggestions" autocomplete="off"/>
+      <datalist id="note-suggestions"></datalist>
     </div>
     <div class="tag-input-wrap" id="tag-wrap-home">
       <div class="tag-input-row">
@@ -556,6 +565,11 @@
     <div class="section-title">
       <span id="hist-title">ESTE MES</span>
     </div>
+    <div class="search-row">
+      <input class="search-input" id="hist-search" type="search" placeholder="Buscar por descripción, categoría, etiqueta o monto..."/>
+      <button class="search-clear oculto" id="hist-search-clear" title="Limpiar búsqueda">×</button>
+    </div>
+    <div class="search-count" id="hist-search-count" style="display:none"></div>
     <div class="filter-row" id="person-filter-row"></div>
     <div class="filter-row" id="filter-row"></div>
     <div id="expense-list"></div>
@@ -964,6 +978,7 @@ let editDate      = "";
 let editRecurId   = null, recurInput = "", recurCat = null;
 let histFilter    = "todas";
 let histTagFilter = null;
+let histQuery     = "";                          // texto del buscador del historial
 let histPerson    = "todos";                     // "todos" | id de persona
 let confirmCallback = null;
 let homeTags = [];
@@ -994,7 +1009,8 @@ const catById = id => CATEGORIES.find(c => c.id === id) || {id, label:id||"Sin c
 
 // Clave normalizada de persona: el cruce entre lo que carga cada app es POR
 // NOMBRE, así que hay que normalizar igual en los dos lados.
-function pkey(name) { return String(name||"").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+const normTxt = s => String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+function pkey(name) { return normTxt(String(name||"").trim()); }
 function personByName(name) {
   const k = pkey(name);
   return PEOPLE.find(p => pkey(p.name) === k) || null;
@@ -1519,10 +1535,45 @@ function allTags() {
 // ════════════════════════════════════════════════════════════════════
 // HOME.JS — pantalla de alta de gastos
 // ════════════════════════════════════════════════════════════════════
-buildCatGrid("cat-grid-home", () => homeCat, id => { homeCat = id; updateAddBtn(); });
+buildCatGrid("cat-grid-home", () => homeCat, id => { homeCat = id; updateAddBtn(); refreshNoteSuggestions(); });
 buildKeypad("keypad-home", k => {
   processKey(k, () => homeInput, v => { homeInput = v; updateDisplay("home", homeInput); updateAddBtn(); });
 });
+
+// Las descripciones más usadas de la categoría elegida, para no tipear
+// "feria" por milésima vez. Va en un <datalist> (autocompletado nativo del
+// teléfono) justo porque NO ocupa alto: en el alta el alto es lo que escasea.
+function refreshNoteSuggestions() {
+  const counts = new Map();
+  liveExpenses().forEach(e => {
+    if (homeCat && e.category !== homeCat) return;
+    const n = (e.note || "").trim();
+    if (n) counts.set(n, (counts.get(n) || 0) + 1);
+  });
+  $("note-suggestions").innerHTML = [...counts.entries()]
+    .sort((a,b) => b[1] - a[1]).slice(0, 8)
+    .map(([n]) => `<option value="${escapeHtml(n)}"></option>`).join("");
+}
+refreshNoteSuggestions();
+
+// Repetir un gasto del historial: precarga el alta con lo mismo. La fecha
+// queda como esté el chip y quién paga sigue siendo el actual (el que repite
+// es el que está pagando ahora).
+function repeatExpense(e) {
+  homeInput = String(e.amount);
+  homeCat = e.category;
+  homeTags = [...(e.tags || [])];
+  homeRecurring = false;
+  $("note-home").value = e.note || "";
+  $("recur-switch").classList.remove("on");
+  updateDisplay("home", homeInput);
+  updateCatGrid("cat-grid-home", () => homeCat);
+  refreshHomeTags();
+  refreshNoteSuggestions();
+  updateAddBtn();
+  switchView("home");
+  $("last-added").classList.add("oculto");
+}
 
 homeDate = todayYMD();
 $("date-home").value = homeDate;
@@ -1587,6 +1638,21 @@ $("add-btn").addEventListener("click", () => {
 // ════════════════════════════════════════════════════════════════════
 // HISTORIAL.JS — lista de gastos del mes, con filtros
 // ════════════════════════════════════════════════════════════════════
+// Busca en descripción, categoría, quién pagó, etiquetas y monto. Todas las
+// palabras tienen que estar (búsqueda AND), sin distinguir tildes ni mayúsculas.
+function matchesQuery(e, q) {
+  const words = normTxt(q).trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = normTxt([e.note, catById(e.category).label, e.author,
+                       (e.tags||[]).join(" "), String(e.amount)].join(" "));
+  return words.every(w => hay.includes(w));
+}
+
+$("hist-search").addEventListener("input", ev => { histQuery = ev.target.value; renderHistorial(); });
+$("hist-search-clear").addEventListener("click", () => {
+  histQuery = ""; $("hist-search").value = ""; renderHistorial();
+});
+
 function renderHistorial() {
   const mex = monthlyEx();
   $("hist-title").textContent = `${viewMonth === currentMonth ? "ESTE MES" : monthFullLabel(viewMonth)} · ${fmt(totalMonth())}`;
@@ -1633,7 +1699,18 @@ function renderHistorial() {
     const p = personById(histPerson);
     if (p) filtered = filtered.filter(e => pkey(e.author) === pkey(p.name));
   }
+  filtered = filtered.filter(e => matchesQuery(e, histQuery));
   filtered = [...filtered].sort((a,b) => String(b.date).localeCompare(String(a.date)));
+
+  // Con búsqueda activa mostramos cuánto suma lo encontrado: es medio el
+  // punto de buscar ("¿cuánto llevo gastado en gas?").
+  const cnt = $("hist-search-count");
+  if (histQuery.trim()) {
+    const suma = filtered.reduce((s,e) => s + e.amount, 0);
+    cnt.textContent = `${filtered.length} gasto${filtered.length !== 1 ? "s" : ""} · ${fmt(suma)}`;
+    cnt.style.display = "block";
+  } else cnt.style.display = "none";
+  $("hist-search-clear").classList.toggle("oculto", !histQuery);
 
   const list = $("expense-list");
   list.innerHTML = "";
@@ -1660,6 +1737,7 @@ function renderHistorial() {
       <div class="expense-right">
         <div class="expense-amount" style="color:${cat.color}">${fmt(e.amount)}</div>
         <div class="action-btns">
+          <button class="icon-btn rep-icon" title="Repetir este gasto">⟳</button>
           <button class="icon-btn edit-icon" title="Editar">✏️</button>
           <button class="icon-btn del-icon" title="Eliminar">×</button>
         </div>
@@ -1669,6 +1747,7 @@ function renderHistorial() {
     row.querySelectorAll(".expense-tag").forEach(el => {
       el.addEventListener("click", () => { histTagFilter = el.dataset.tag; renderHistorial(); });
     });
+    row.querySelector(".rep-icon").addEventListener("click", () => repeatExpense(e));
     row.querySelector(".edit-icon").addEventListener("click", () => openEditModal(e));
 
     const askDelete = () => showConfirm(
