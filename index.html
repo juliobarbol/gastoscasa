@@ -298,6 +298,13 @@
     .pago-row .pago-txt { flex:1; }
     .pago-title { font-size:9px; letter-spacing:.15em; color:var(--text-mute); margin:12px 0 2px; }
     .settle-btn { background:none; border:1px solid var(--green); color:var(--green); font-family:var(--font); font-size:8px; letter-spacing:.1em; padding:5px 9px; border-radius:20px; cursor:pointer; flex-shrink:0; }
+
+    /* GASTOS FIJOS: día del mes y cuotas */
+    .recur-meta-row { display:flex; gap:8px; margin-bottom:6px; }
+    .recur-meta-field { flex:1; display:flex; align-items:center; gap:6px; background:var(--bg2); border:1px solid var(--border); padding:4px 10px; }
+    .recur-meta-field span { font-size:8px; letter-spacing:.12em; color:var(--text-mute); white-space:nowrap; }
+    .recur-meta-field input { flex:1; min-width:0; background:none; border:none; color:var(--text); font-family:var(--font); font-size:12px; font-weight:700; text-align:right; outline:none; }
+    .cuota-badge { font-size:8px; letter-spacing:.08em; color:#8b5cf6; border:1px solid #8b5cf655; background:#8b5cf614; padding:1px 5px; border-radius:3px; margin-left:4px; }
     .budget-spent { font-size:9px; letter-spacing:.06em; color:var(--text-mute); padding:0 0 9px 26px; border-bottom:1px solid var(--border); }
     .budget-total-row + .budget-spent { border-bottom:2px solid var(--border2); padding-bottom:13px; margin-bottom:6px; }
     .budget-cat-info { display:flex; align-items:center; gap:8px; flex:1; }
@@ -852,6 +859,17 @@
       </div>
       <div class="cat-row" id="cat-grid-recur"></div>
       <input class="note-input" id="note-recur" type="text" placeholder="Descripción..." maxlength="40"/>
+      <div class="recur-meta-row">
+        <label class="recur-meta-field">
+          <span>DÍA DEL MES</span>
+          <input id="recur-day" type="number" min="1" max="31" placeholder="—"/>
+        </label>
+        <label class="recur-meta-field">
+          <span>CUOTAS</span>
+          <input id="recur-cuotas" type="number" min="1" max="120" placeholder="sin fin"/>
+        </label>
+      </div>
+      <div class="payer-row" id="payer-row-recur"></div>
       <div class="keypad" id="keypad-recur"></div>
       <button class="add-btn purple" id="save-recur-btn" disabled>GUARDAR GASTO FIJO</button>
     </div>
@@ -1014,6 +1032,12 @@ let expenses   = load("gastos_data", []);        // [{id,amount,category,note,ta
 let recurring  = load("gastos_recurring", []);   // [{id,amount,category,note,updatedAt,deleted,_dirty}]
 let budgets    = load("gastos_budgets", {});     // {categoryId: amount}
 
+// Datos extra de cada gasto fijo: {recurId: {day, owner, cuotas}}. Van acá y
+// no en `recurring` porque `casa_recurring` no tiene esas columnas; como son
+// configuración (cambian poco), viajan por `casa_settings` igual que las
+// categorías y los límites, sin tocar el esquema de la nube.
+let recurMeta  = load("gastos_recur_meta", {});
+
 // Quién soy en ESTE teléfono. Con nube lo define la sesión; sin nube, se elige a mano.
 let meId       = load("gastos_me", null);        // id de PEOPLE
 
@@ -1030,7 +1054,7 @@ let homeInput     = "", homeCat = null, homeRecurring = false, homePayer = null;
 let homeDate      = "";                          // "YYYY-MM-DD" del gasto que se está cargando
 let editingId     = null, editInput = "", editCat = null, editPayer = null;
 let editDate      = "";
-let editRecurId   = null, recurInput = "", recurCat = null;
+let editRecurId   = null, recurInput = "", recurCat = null, recurOwner = null;
 let pagoInput     = "", pagoDe = null, pagoA = null;   // modal de pago entre personas
 let histFilter    = "todas";
 let histTagFilter = null;
@@ -1178,7 +1202,7 @@ function touchExpense(exp) { exp.updatedAt = nowISO(); exp._dirty = true; return
 
 function persistExpenses()  { save("gastos_data", expenses); schedulePush(); }
 function persistRecurring() { save("gastos_recurring", recurring); schedulePush(); }
-function persistSettings()  { save("gastos_categories", CATEGORIES); save("gastos_budgets", budgets); save("gastos_people", PEOPLE); pushSettings(); }
+function persistSettings()  { save("gastos_categories", CATEGORIES); save("gastos_budgets", budgets); save("gastos_people", PEOPLE); save("gastos_recur_meta", recurMeta); pushSettings(); }
 
 // `dateISO` opcional: si no viene, el gasto es de ahora. El `month` SIEMPRE
 // se deriva de la fecha, así un gasto con fecha vieja cae en su mes.
@@ -2432,12 +2456,24 @@ function renderRecurrentes() {
   emptyEl.style.display = "none";
   items.forEach(r => {
     const cat = catById(r.category);
+    const meta = recurMeta[r.id] || {};
+    const restan = cuotasRestantes(r);
+    // Renglón de detalle: día del mes, quién lo paga siempre y cuántas cuotas
+    // quedan. Solo aparece lo que esté configurado.
+    const detalle = [
+      meta.day ? `día ${meta.day}` : "",
+      meta.owner ? `paga ${escapeHtml(meta.owner)}` : "",
+      restan === null ? "" : restan === 0 ? "terminado" : `quedan ${restan} de ${meta.cuotas}`
+    ].filter(Boolean).join(" · ");
     const row = document.createElement("div"); row.className = "recur-row";
+    if (restan === 0) row.style.opacity = ".5";
     row.innerHTML = `
       <div class="recur-dot" style="background:${cat.color}"></div>
       <div class="recur-info">
-        <div class="recur-name">${cat.emoji} ${escapeHtml(cat.label)}</div>
+        <div class="recur-name">${cat.emoji} ${escapeHtml(cat.label)}${
+          restan !== null ? `<span class="cuota-badge">${restan === 0 ? "SIN CUOTAS" : restan + " CUOTAS"}</span>` : ""}</div>
         ${r.note ? `<div class="recur-cat">${escapeHtml(r.note)}</div>` : ""}
+        ${detalle ? `<div class="recur-cat">${detalle}</div>` : ""}
       </div>
       <div class="recur-right">
         <div class="recur-amount">${fmt(r.amount)}</div>
@@ -2449,33 +2485,87 @@ function renderRecurrentes() {
     row.querySelector(".edit-icon").addEventListener("click", () => openRecurModal(r));
     row.querySelector(".del-icon").addEventListener("click", () => {
       showConfirm("Eliminar gasto fijo", `¿Eliminar ${fmt(r.amount)} en ${cat.label}?`, "Eliminar",
-        () => { deleteRecurring(r.id); renderRecurrentes(); });
+        () => { deleteRecurring(r.id); delete recurMeta[r.id]; persistSettings(); renderRecurrentes(); });
     });
     list.appendChild(row);
   });
 }
 
+// Un gasto fijo se identifica por categoría + descripción: es también como
+// lo distingue una persona, y es lo único que viaja a la nube de cada fijo.
+const recurKey = r => r.category + "|" + (r.note || "");
+
+// Cuotas: en vez de llevar un contador que haya que ir bajando (y que dos
+// teléfonos podrían pisarse), se cuenta en cuántos meses distintos ya se
+// aplicó. Se deriva de los gastos, que sí tienen last-write-wins por fila.
+function cuotasUsadas(r) {
+  const k = recurKey(r);
+  return new Set(liveExpenses().filter(e => e.recurring && recurKey(e) === k).map(e => e.month)).size;
+}
+function cuotasRestantes(r) {
+  const total = (recurMeta[r.id] || {}).cuotas;
+  return total ? Math.max(0, total - cuotasUsadas(r)) : null;
+}
+
+// Con qué fecha entra un fijo en un mes: el día configurado (recortado al
+// largo del mes, para que "31" no se vaya de febrero) o el ancla del mes.
+function fechaFijo(r, month) {
+  const day = (recurMeta[r.id] || {}).day;
+  if (!day) return monthAnchorISO(month);
+  const [yr,mo] = month.split("-").map(Number);
+  const ultimo = new Date(yr, mo, 0).getDate();
+  return isoFromYMD(`${month}-${String(Math.min(day, ultimo)).padStart(2,"0")}`);
+}
+
+// Los que todavía no están cargados en ese mes y a los que les quedan cuotas.
+function fijosPendientes(month) {
+  const yaAplicados = liveExpenses().filter(e => e.month === month && e.recurring).map(recurKey);
+  return liveRecurring().filter(r => !yaAplicados.includes(recurKey(r)) && cuotasRestantes(r) !== 0);
+}
+
+function aplicarFijos(items, month) {
+  items.forEach(r => {
+    const owner = (recurMeta[r.id] || {}).owner || null;
+    addExpenseRecord(r.amount, r.category, r.note, true, [], owner, fechaFijo(r, month));
+  });
+  updateStrip(); renderRecurrentes();
+  if (currentView === "historial") renderHistorial();
+  if (currentView === "resumen")   renderResumen();
+}
+
 $("apply-recurring-btn").addEventListener("click", () => {
-  const items = liveRecurring();
-  if (items.length === 0) return;
+  if (liveRecurring().length === 0) return;
   // Se aplican al mes que se está mirando, no siempre al actual: así se
   // puede completar un mes pasado desde el navegador de mes.
   const destino = monthFullLabel(viewMonth);
+  const pend = fijosPendientes(viewMonth);
+  if (!pend.length) {
+    showConfirm("Nada que aplicar", `Los gastos fijos ya están cargados en ${destino}.`, "OK", () => {}, false);
+    return;
+  }
+  const suma = pend.reduce((s,r) => s + r.amount, 0);
   showConfirm("Aplicar gastos fijos",
-    `Se agregarán ${items.length} gasto(s) fijo(s) a ${destino}. Los que ya estén registrados en ese mes no se duplican.`,
+    `Se agregarán ${pend.length} gasto(s) fijo(s) por ${fmt(suma)} a ${destino}.`,
     "Aplicar",
     () => {
-      const yaAplicados = monthlyEx().filter(e => e.recurring).map(e => e.category + "|" + (e.note||""));
-      let added = 0;
-      items.forEach(r => {
-        if (!yaAplicados.includes(r.category + "|" + (r.note||""))) {
-          addExpenseRecord(r.amount, r.category, r.note, true, [], null, monthAnchorISO(viewMonth)); added++;
-        }
-      });
-      updateStrip(); renderRecurrentes();
-      setTimeout(() => showConfirm("Listo", `Se aplicaron ${added} gasto(s) fijo(s) a ${destino}.`, "OK", () => {}, false), 250);
+      aplicarFijos(pend, viewMonth);
+      setTimeout(() => showConfirm("Listo", `Se aplicaron ${pend.length} gasto(s) fijo(s) a ${destino}.`, "OK", () => {}, false), 250);
     }, false);
 });
+
+// Al abrir la app en un mes nuevo, ofrecer cargar los fijos que falten. Si
+// decís que no, no vuelve a preguntar hasta el mes siguiente.
+function ofrecerFijosDelMes() {
+  if (viewMonth !== currentMonth) return;
+  if (load("gastos_recur_asked", null) === currentMonth) return;
+  const pend = fijosPendientes(currentMonth);
+  if (!pend.length) return;
+  save("gastos_recur_asked", currentMonth);
+  const suma = pend.reduce((s,r) => s + r.amount, 0);
+  showConfirm(`Gastos fijos de ${monthFullLabel(currentMonth)}`,
+    `Faltan ${pend.length} gasto(s) fijo(s) por ${fmt(suma)}. ¿Los cargo ahora?`,
+    "Cargarlos", () => aplicarFijos(pend, currentMonth), false);
+}
 
 buildCatGrid("cat-grid-recur", () => recurCat, id => { recurCat = id; updateSaveRecurBtn(); });
 buildKeypad("keypad-recur", k => {
@@ -2487,8 +2577,21 @@ function updateSaveRecurBtn() {
 function openRecurModal(r) {
   editRecurId = r.id; recurInput = String(r.amount); recurCat = r.category;
   $("note-recur").value = r.note || "";
+  const meta = recurMeta[r.id] || {};
+  $("recur-day").value = meta.day || "";
+  $("recur-cuotas").value = meta.cuotas || "";
+  const dueño = meta.owner ? personByName(meta.owner) : null;
+  recurOwner = dueño ? dueño.id : null;
+  rebuildRecurOwnerRow();
   updateDisplay("recur", recurInput); updateCatGrid("cat-grid-recur", () => recurCat); updateSaveRecurBtn();
   $("modal-recur").classList.add("open");
+}
+// Tocar de nuevo al que ya está elegido lo deselecciona: sin dueño fijo, el
+// gasto queda a nombre de quien lo aplica (que es como venía funcionando).
+function rebuildRecurOwnerRow() {
+  buildPayerRow("payer-row-recur", () => recurOwner,
+                id => { recurOwner = (recurOwner === id ? null : id); rebuildRecurOwnerRow(); },
+                false, "PAGA SIEMPRE");
 }
 function closeRecurModal() { $("modal-recur").classList.remove("open"); editRecurId = null; }
 $("modal-recur-close").addEventListener("click", closeRecurModal);
@@ -2498,8 +2601,20 @@ $("save-recur-btn").addEventListener("click", () => {
   recurring = recurring.map(r => r.id === editRecurId
     ? {...r, amount, category:recurCat, note:$("note-recur").value.trim(), updatedAt:nowISO(), _dirty:true}
     : r);
-  persistRecurring(); closeRecurModal(); renderRecurrentes();
+  guardarRecurMeta(editRecurId);
+  persistRecurring(); persistSettings(); closeRecurModal(); renderRecurrentes();
 });
+
+function guardarRecurMeta(id) {
+  const day    = parseInt($("recur-day").value, 10);
+  const cuotas = parseInt($("recur-cuotas").value, 10);
+  const dueño  = personById(recurOwner);
+  const meta = {};
+  if (day >= 1 && day <= 31) meta.day = day;
+  if (cuotas >= 1) meta.cuotas = cuotas;
+  if (dueño) meta.owner = dueño.name;
+  if (Object.keys(meta).length) recurMeta[id] = meta; else delete recurMeta[id];
+}
 
 
 // ════════════════════════════════════════════════════════════════════
@@ -2689,7 +2804,7 @@ $("export-csv-btn").addEventListener("click", () => {
 $("export-json-btn").addEventListener("click", () => {
   const data = JSON.stringify({
     _app:"GastosCasa", _type:"backup_v1", _exportedAt: nowISO(),
-    expenses, recurring, budgets, categories: CATEGORIES, people: PEOPLE
+    expenses, recurring, budgets, recurMeta, categories: CATEGORIES, people: PEOPLE
   }, null, 2);
   downloadFile("gastos-casa-backup.json", "application/json", data);
 });
@@ -2709,6 +2824,7 @@ $("import-file").addEventListener("change", e => {
       expenses   = data.expenses || [];
       recurring  = data.recurring || [];
       budgets    = data.budgets || {};
+      recurMeta  = data.recurMeta || {};
       CATEGORIES = data.categories || CATEGORIES;
       PEOPLE     = data.people || PEOPLE;
       migrateLegacy();
@@ -2730,7 +2846,7 @@ $("clear-btn").addEventListener("click", () => {
     "Borrar todo", () => {
       expenses  = expenses.map(e  => ({...e, deleted:true, updatedAt:nowISO(), _dirty:true}));
       recurring = recurring.map(r => ({...r, deleted:true, updatedAt:nowISO(), _dirty:true}));
-      budgets = {};
+      budgets = {}; recurMeta = {};
       persistExpenses(); persistRecurring(); persistSettings();
       updateStrip(); renderCurrentView();
     });
@@ -3022,7 +3138,8 @@ function pushSettings() {
       const rows = [
         { ns: sbNs(), key: "categories", value: CATEGORIES, updated_at: nowISO() },
         { ns: sbNs(), key: "budgets",    value: budgets,    updated_at: nowISO() },
-        { ns: sbNs(), key: "people",     value: PEOPLE.map(p => ({id:p.id, name:p.name, color:p.color})), updated_at: nowISO() }
+        { ns: sbNs(), key: "people",     value: PEOPLE.map(p => ({id:p.id, name:p.name, color:p.color})), updated_at: nowISO() },
+        { ns: sbNs(), key: "recur_meta", value: recurMeta,  updated_at: nowISO() }
       ];
       const { error } = await sbClient.from("casa_settings").upsert(rows, { onConflict: "ns,key" });
       if (error) throw error;
@@ -3059,6 +3176,7 @@ function mergeSettingRow(row) {
   if (!newer(row.updated_at, localStamp[row.key])) return false;
   if (row.key === "categories" && Array.isArray(row.value)) { CATEGORIES = row.value; save("gastos_categories", CATEGORIES); }
   else if (row.key === "budgets" && row.value && typeof row.value === "object") { budgets = row.value; save("gastos_budgets", budgets); }
+  else if (row.key === "recur_meta" && row.value && typeof row.value === "object") { recurMeta = row.value; save("gastos_recur_meta", recurMeta); }
   else if (row.key === "people" && Array.isArray(row.value)) {
     // Mezcla por nombre para no perder el `uid` que trajo casa_members.
     row.value.forEach(p => { if (!personByName(p.name)) PEOPLE.push({...p}); });
@@ -3407,6 +3525,11 @@ async function boot() {
     else if (sbHasStoredSession()) setSync("pending");
   }
   sbRefreshUI();
+
+  // Ofrecer los fijos del mes recién acá: con nube, después del primer pull,
+  // para no cargar de nuevo los que la otra persona ya aplicó. Y nunca con el
+  // gate tapando la app.
+  if (!$("auth-gate").classList.contains("open")) ofrecerFijosDelMes();
 
   // Al volver al frente o al recuperar internet: sincronizar.
   document.addEventListener("visibilitychange", () => { if (!document.hidden && sbReady()) fullSync(); });
